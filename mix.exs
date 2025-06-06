@@ -43,7 +43,7 @@ defmodule OpenAI.Agents.MixProject do
       {:ecto, "~> 3.11"},
       {:telemetry, "~> 1.2"},
       {:nimble_options, "~> 1.1"},
-      
+
       # Dev and test dependencies
       {:dotenv, "~> 3.0", only: [:dev, :test]},
       {:ex_doc, "~> 0.31", only: :dev, runtime: false},
@@ -51,7 +51,8 @@ defmodule OpenAI.Agents.MixProject do
       {:dialyxir, "~> 1.4", only: [:dev], runtime: false},
       {:excoveralls, "~> 0.18", only: :test},
       {:mock, "~> 0.3", only: :test},
-      {:bypass, "~> 2.1", only: :test}
+      {:bypass, "~> 2.1", only: :test},
+      {:mix_test_watch, "~> 1.1", only: :dev, runtime: false}
     ]
   end
 
@@ -62,6 +63,7 @@ defmodule OpenAI.Agents.MixProject do
     [
       setup: ["deps.get", "compile"],
       test: ["test"],
+      "test.watch": ["test.watch"],
       "test.coverage": ["coveralls.html"],
       lint: ["format --check-formatted", "credo --strict"],
       "format.all": ["format"]
