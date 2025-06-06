@@ -15,7 +15,7 @@ defmodule OpenAI.Agent do
           %{
             name: "weather_assistant",
             instructions: "You are a helpful weather assistant.",
-            model: "gpt-4o",
+            model: "gpt-4.1-mini",
             tools: [MyApp.Tools.GetWeather],
             output_schema: MyApp.Schemas.WeatherReport
           }

@@ -7,11 +7,12 @@ if Code.ensure_loaded?(Dotenv) and File.exists?(".env") do
 end
 
 # Test-specific configuration
+# For remote tests, we'll use the real OpenAI API if OPENAI_API_KEY is set
 config :openai_agents,
   api_key: System.get_env("OPENAI_API_KEY") || "test-api-key",
-  base_url: System.get_env("OPENAI_BASE_URL") || "http://localhost:4001",
+  base_url: System.get_env("OPENAI_BASE_URL") || "https://api.openai.com/v1",
   max_turns: 5,
-  timeout: 5_000
+  timeout: 30_000  # Increased timeout for remote tests
 
 # Configure logging for tests
 config :logger, level: :warning

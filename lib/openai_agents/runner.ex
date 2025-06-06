@@ -128,6 +128,13 @@ defmodule OpenAI.Agents.Runner do
     {:reply, {:ok, producer}, state}
   end
 
+  @impl true
+  def handle_info(:agent_started, state) do
+    # This message is sent by agent lifecycle callbacks (e.g., on_start)
+    # We simply acknowledge it and continue
+    {:noreply, state}
+  end
+
   # Private functions
 
   defp execute_agent_loop(state) do
@@ -317,19 +324,39 @@ defmodule OpenAI.Agents.Runner do
   defp build_request(instructions, conversation, config, state) do
     tools = prepare_tools(config, state)
     
-    %{
-      model: Map.get(config, :model, "gpt-4o"),
+    base_request = %{
+      model: Map.get(config, :model, "gpt-4.1-mini"),
       instructions: instructions,
       input: conversation,
       tools: tools,
       temperature: get_in(config, [:model_settings, :temperature]),
       top_p: get_in(config, [:model_settings, :top_p]),
-      max_tokens: get_in(config, [:model_settings, :max_tokens]),
       tool_choice: get_in(config, [:model_settings, :tool_choice]) || "auto",
       parallel_tool_calls: get_in(config, [:model_settings, :parallel_tool_calls]) != false,
-      response_format: build_response_format(config),
       stream: state.stream_producer != nil
     }
+    
+    # Add response format if configured
+    base_request = case Map.get(config, :output_schema) do
+      nil -> base_request
+      schema_module -> 
+        # Extract just the module name from the full module path
+        module_name = schema_module
+        |> to_string()
+        |> String.split(".")
+        |> List.last()
+        |> String.replace(~r/[^a-zA-Z0-9_]/, "_")
+        
+        Map.put(base_request, :text, %{
+          format: %{
+            type: "json_schema",
+            name: module_name,
+            schema: schema_module.json_schema()
+          }
+        })
+    end
+    
+    base_request
     |> Enum.reject(fn {_, v} -> is_nil(v) end)
     |> Map.new()
   end
@@ -338,25 +365,33 @@ defmodule OpenAI.Agents.Runner do
     tools = Map.get(config, :tools, [])
     handoffs = Map.get(config, :handoffs, [])
     
-    tool_schemas = Enum.map(tools, &apply(&1, :schema, []))
-    handoff_schemas = Enum.map(handoffs, &Handoff.to_tool_schema/1)
+    tool_schemas = Enum.map(tools, fn tool_module ->
+      schema = apply(tool_module, :schema, [])
+      Map.put(schema, :type, "function")
+    end)
+    
+    handoff_schemas = Enum.map(handoffs, fn handoff ->
+      schema = Handoff.to_tool_schema(handoff)
+      Map.put(schema, :type, "function")
+    end)
     
     tool_schemas ++ handoff_schemas
   end
 
-  defp build_response_format(config) do
-    case Map.get(config, :output_schema) do
-      nil -> nil
-      schema_module -> 
-        %{
-          type: "json_schema",
-          json_schema: %{
-            name: to_string(schema_module),
-            schema: schema_module.json_schema()
-          }
-        }
-    end
-  end
+  # This function is no longer needed - format is handled in build_request
+  # defp build_response_format(config) do
+  #   case Map.get(config, :output_schema) do
+  #     nil -> nil
+  #     schema_module -> 
+  #       %{
+  #         type: "json_schema",
+  #         json_schema: %{
+  #           name: to_string(schema_module),
+  #           schema: schema_module.json_schema()
+  #         }
+  #       }
+  #   end
+  # end
 
   defp get_model_adapter(_config) do
     # For now, we only support the Responses API adapter
@@ -379,16 +414,25 @@ defmodule OpenAI.Agents.Runner do
   end
 
   defp get_base_url do
-    System.get_env("OPENAI_BASE_URL") || 
-      Application.get_env(:openai_agents, :base_url) ||
-      "https://api.openai.com/v1"
+    # For tests with real API key, use real OpenAI endpoint
+    cond do
+      System.get_env("OPENAI_BASE_URL") ->
+        System.get_env("OPENAI_BASE_URL")
+        
+      Mix.env() == :test and System.get_env("OPENAI_API_KEY") ->
+        # In test mode with real API key, use real endpoint
+        "https://api.openai.com/v1"
+        
+      true ->
+        Application.get_env(:openai_agents, :base_url, "https://api.openai.com/v1")
+    end
   end
 
   defp init_context(nil), do: Context.new()
   defp init_context(context), do: Context.wrap(context)
 
   defp normalize_input(input) when is_binary(input) do
-    [%{type: "user_text", text: input}]
+    [%{type: "message", role: "user", content: input}]
   end
   defp normalize_input(input) when is_list(input), do: input
 
@@ -397,10 +441,15 @@ defmodule OpenAI.Agents.Runner do
   end
 
   defp update_usage(current_usage, new_usage) do
+    # The Responses API uses different field names for usage
+    prompt_tokens = new_usage["input_tokens"] || new_usage[:prompt_tokens] || 0
+    completion_tokens = new_usage["output_tokens"] || new_usage[:completion_tokens] || 0
+    total_tokens = new_usage["total_tokens"] || new_usage[:total_tokens] || (prompt_tokens + completion_tokens)
+    
     %Usage{
-      prompt_tokens: current_usage.prompt_tokens + (new_usage[:prompt_tokens] || 0),
-      completion_tokens: current_usage.completion_tokens + (new_usage[:completion_tokens] || 0),
-      total_tokens: current_usage.total_tokens + (new_usage[:total_tokens] || 0)
+      prompt_tokens: current_usage.prompt_tokens + prompt_tokens,
+      completion_tokens: current_usage.completion_tokens + completion_tokens,
+      total_tokens: current_usage.total_tokens + total_tokens
     }
   end
 

@@ -24,7 +24,8 @@ defmodule OpenAI.Agents.Models.ResponsesAdapter do
          |> Finch.request(OpenAI.Agents.Finch, receive_timeout: @timeout) do
       {:ok, %{status: 200, body: response_body}} ->
         case Jason.decode(response_body) do
-          {:ok, decoded} -> {:ok, normalize_response(decoded)}
+          {:ok, decoded} -> 
+            {:ok, normalize_response(decoded)}
           {:error, error} -> {:error, {:json_decode_error, error}}
         end
         
@@ -69,11 +70,39 @@ defmodule OpenAI.Agents.Models.ResponsesAdapter do
   end
 
   defp normalize_response(response) do
+    # The Responses API returns output as an array of messages
+    output_messages = response["output"] || []
+    
+    # Convert output messages to the expected format
+    output = Enum.flat_map(output_messages, fn message ->
+      case message["type"] do
+        "message" ->
+          # Extract content items from the message
+          content_items = message["content"] || []
+          Enum.map(content_items, fn content ->
+            case content["type"] do
+              "output_text" -> %{type: "text", text: content["text"]}
+              "tool_use" -> %{
+                type: "function_call",
+                id: content["id"],
+                name: content["name"],
+                arguments: content["arguments"]
+              }
+              _ -> content
+            end
+          end)
+        "handoff" ->
+          [%{type: "handoff", target: message["target"]}]
+        _ ->
+          []
+      end
+    end)
+    
     %{
-      output: response["output"] || [],
+      output: output,
       usage: response["usage"] || %{},
-      response_id: response["response_id"],
-      created: response["created"],
+      response_id: response["id"],
+      created: response["created_at"],
       model: response["model"]
     }
   end

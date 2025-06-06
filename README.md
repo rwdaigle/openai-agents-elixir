@@ -578,6 +578,27 @@ end
 
 ### Testing Agents
 
+The library includes both unit tests and integration tests:
+
+#### Running Tests
+
+```bash
+# Run unit tests only (default)
+mix test
+
+# Run integration tests that call OpenAI API
+mix test --include remote
+
+# Run only remote/integration tests
+mix test --only remote
+```
+
+**Note:** Integration tests require a valid `OPENAI_API_KEY` environment variable and will make real API calls. They are excluded by default to prevent accidental API usage and costs.
+
+#### Writing Tests
+
+For unit tests, mock the API calls:
+
 ```elixir
 # In your tests
 defmodule MyApp.AgentTest do
@@ -591,13 +612,30 @@ defmodule MyApp.AgentTest do
     
     Bypass.expect_once(bypass, "POST", "/responses", fn conn ->
       Plug.Conn.resp(conn, 200, Jason.encode!(%{
-        output: [%{type: "text", text: "Hello!"}],
+        output: [%{type: "message", content: [%{type: "output_text", text: "Hello!"}]}],
         usage: %{total_tokens: 10}
       }))
     end)
     
     assert {:ok, result} = OpenAI.Agents.run(MyApp.Assistant, "Hi")
     assert result.output == "Hello!"
+  end
+end
+```
+
+For integration tests that need the real API:
+
+```elixir
+defmodule MyApp.AgentIntegrationTest do
+  use ExUnit.Case
+  
+  # Tag the entire module as remote
+  @moduletag :remote
+  
+  test "agent handles real conversations" do
+    {:ok, result} = OpenAI.Agents.run(MyApp.Assistant, "Hello")
+    assert is_binary(result.output)
+    assert result.usage.total_tokens > 0
   end
 end
 ```
