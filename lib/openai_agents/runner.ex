@@ -372,9 +372,10 @@ defmodule OpenAI.Agents.Runner do
   end
 
   defp get_api_key do
+    # Priority order: runtime env var > config > error
     System.get_env("OPENAI_API_KEY") || 
       Application.get_env(:openai_agents, :api_key) ||
-      raise "OpenAI API key not configured"
+      raise "OpenAI API key not configured. Set OPENAI_API_KEY environment variable or configure in config files."
   end
 
   defp get_base_url do

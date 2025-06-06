@@ -87,7 +87,7 @@ defmodule OpenAI.Agents.Models.ResponsesAdapter do
               {:status, status}, acc when status == 200 -> {:cont, acc}
               {:status, status}, _acc -> {:halt, {:error, status}}
               {:headers, _headers}, acc -> {:cont, acc}
-              {:data, data}, acc -> {:cont, {:data, data}}
+              {:data, data}, _acc -> {:cont, {:data, data}}
             end
           )
     
@@ -117,7 +117,7 @@ defmodule OpenAI.Agents.Models.ResponsesAdapter do
     end
   end
 
-  defp cleanup_stream({ref, _buffer}) do
+  defp cleanup_stream({_ref, _buffer}) do
     # Ensure the stream is properly closed
     :ok
   end

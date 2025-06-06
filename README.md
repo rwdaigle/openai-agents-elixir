@@ -33,12 +33,28 @@ mix deps.get
 
 ### 1. Configure your OpenAI API key
 
+#### For Development/Test
+
+Create a `.env` file in your project root (copy from `.env.example`):
+```bash
+cp .env.example .env
+```
+
+Then edit `.env` and add your API key:
+```bash
+OPENAI_API_KEY=your-api-key-here
+```
+
+The library will automatically load this file in development and test environments.
+
+#### For Production
+
 Set your API key as an environment variable:
 ```bash
 export OPENAI_API_KEY="your-api-key"
 ```
 
-Or configure it in your `config/config.exs`:
+Or configure it in your `config/runtime.exs`:
 ```elixir
 config :openai_agents,
   api_key: System.get_env("OPENAI_API_KEY"),

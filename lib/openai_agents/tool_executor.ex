@@ -5,7 +5,7 @@ defmodule OpenAI.Agents.ToolExecutor do
   """
 
   require Logger
-  alias OpenAI.Agents.{Tool, Telemetry}
+  alias OpenAI.Agents.Telemetry
 
   @doc """
   Executes multiple function calls in parallel.

@@ -92,7 +92,7 @@ defmodule OpenAI.Agents.Handoff do
     end)
   end
 
-  defp apply_filter(filter, conversation, state) when is_function(filter, 1) do
+  defp apply_filter(filter, conversation, _state) when is_function(filter, 1) do
     filter.(conversation)
   end
 

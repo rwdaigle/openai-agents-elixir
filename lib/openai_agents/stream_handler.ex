@@ -41,7 +41,7 @@ defmodule OpenAI.Agents.StreamHandler do
   # GenStage callbacks
 
   @impl true
-  def init(opts) do
+  def init(_opts) do
     state = %__MODULE__{
       buffer: :queue.new(),
       completed: false,
@@ -121,7 +121,7 @@ defmodule OpenAI.Agents.StreamHandler do
     end
   end
 
-  defp reply_to_subscribers([], buffer, _completed), do: {[], []}
+  defp reply_to_subscribers([], _buffer, _completed), do: {[], []}
   defp reply_to_subscribers(subscribers, buffer, completed) do
     {remaining, events} = 
       Enum.reduce(subscribers, {[], []}, fn from, {subs, evts} ->

@@ -5,6 +5,9 @@ defmodule OpenAI.Agents.Application do
 
   @impl true
   def start(_type, _args) do
+    # Load .env file in dev/test if available
+    load_dotenv()
+    
     children = [
       # Registry for agent processes
       {Registry, keys: :unique, name: OpenAI.Agents.Registry},
@@ -28,5 +31,18 @@ defmodule OpenAI.Agents.Application do
     OpenAI.Agents.Telemetry.setup()
     
     Supervisor.start_link(children, opts)
+  end
+
+  defp load_dotenv do
+    if Mix.env() in [:dev, :test] do
+      case Code.ensure_loaded(Dotenv) do
+        {:module, _} ->
+          if File.exists?(".env") do
+            Dotenv.load!()
+          end
+        _ ->
+          :ok
+      end
+    end
   end
 end

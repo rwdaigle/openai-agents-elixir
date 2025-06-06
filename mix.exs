@@ -26,10 +26,14 @@ defmodule OpenAI.Agents.MixProject do
 
   def application do
     [
-      extra_applications: [:logger],
+      extra_applications: [:logger] ++ extra_applications(Mix.env()),
       mod: {OpenAI.Agents.Application, []}
     ]
   end
+
+  defp extra_applications(:dev), do: [:dotenv]
+  defp extra_applications(:test), do: [:dotenv]
+  defp extra_applications(_), do: []
 
   defp deps do
     [
@@ -41,6 +45,7 @@ defmodule OpenAI.Agents.MixProject do
       {:nimble_options, "~> 1.1"},
       
       # Dev and test dependencies
+      {:dotenv, "~> 3.0", only: [:dev, :test]},
       {:ex_doc, "~> 0.31", only: :dev, runtime: false},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.4", only: [:dev], runtime: false},

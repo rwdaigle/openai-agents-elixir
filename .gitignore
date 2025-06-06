@@ -35,6 +35,7 @@ Thumbs.db
 # Ignore environment files
 .env
 .env.*
+!.env.example
 
 # Ignore editor files
 *.swp
