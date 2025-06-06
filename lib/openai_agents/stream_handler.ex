@@ -47,28 +47,33 @@ defmodule OpenAI.Agents.StreamHandler do
       completed: false,
       subscribers: []
     }
-
+    
     {:producer, state, dispatcher: GenStage.BroadcastDispatcher}
   end
 
   @impl true
   def handle_cast({:emit, event}, state) do
     normalized_event = normalize_event(event)
-    new_buffer = :queue.in(normalized_event, state.buffer)
-
+    
+    # Skip nil events
+    new_buffer = case normalized_event do
+      nil -> state.buffer
+      event -> :queue.in(event, state.buffer)
+    end
+    
     # Emit events if we have demand
     {events, new_state} = dispatch_events(%{state | buffer: new_buffer})
-
+    
     {:noreply, events, new_state}
   end
 
   @impl true
   def handle_cast(:complete, state) do
     new_state = %{state | completed: true}
-
+    
     # Emit any remaining events
     {events, final_state} = dispatch_events(new_state)
-
+    
     {:noreply, events, final_state}
   end
 
@@ -77,7 +82,7 @@ defmodule OpenAI.Agents.StreamHandler do
     case :queue.out(state.buffer) do
       {{:value, event}, new_queue} ->
         {:reply, {:ok, event}, [], %{state | buffer: new_queue}}
-
+        
       {:empty, _} ->
         if state.completed do
           {:reply, :done, [], state}
@@ -90,77 +95,69 @@ defmodule OpenAI.Agents.StreamHandler do
   end
 
   @impl true
-  def handle_demand(demand, state) when demand > 0 do
-    {events, new_state} = dispatch_events(state, demand)
-    {:noreply, events, new_state}
+  def handle_demand(_demand, state) do
+    # We don't use GenStage demand, only direct subscribers via next_event
+    {:noreply, [], state}
   end
 
   # Private functions
 
-  defp dispatch_events(state, max_demand \\ :infinity) do
-    {events, new_buffer} = take_events(state.buffer, max_demand, [])
-
-    # Reply to any waiting subscribers
-    {remaining_subscribers, more_events} =
-      reply_to_subscribers(state.subscribers, new_buffer, state.completed)
-
-    all_events = events ++ more_events
-
-    {all_events, %{state | buffer: new_buffer, subscribers: remaining_subscribers}}
+  defp dispatch_events(state, _max_demand \\ :infinity) do
+    # Only reply to waiting subscribers - don't use GenStage demand
+    {remaining_subscribers, final_buffer} = 
+      reply_to_subscribers(state.subscribers, state.buffer, state.completed)
+    
+    # Return empty events for GenStage since we're not using demand
+    {[], %{state | buffer: final_buffer, subscribers: remaining_subscribers}}
   end
 
-  defp take_events(queue, 0, acc), do: {Enum.reverse(acc), queue}
 
-  defp take_events(queue, max_demand, acc) do
-    case :queue.out(queue) do
-      {{:value, event}, new_queue} ->
-        new_max = if max_demand == :infinity, do: :infinity, else: max_demand - 1
-        take_events(new_queue, new_max, [event | acc])
-
-      {:empty, _} ->
-        {Enum.reverse(acc), queue}
-    end
-  end
-
-  defp reply_to_subscribers([], _buffer, _completed), do: {[], []}
-
+  defp reply_to_subscribers([], buffer, _completed), do: {[], buffer}
   defp reply_to_subscribers(subscribers, buffer, completed) do
-    {remaining, events} =
-      Enum.reduce(subscribers, {[], []}, fn from, {subs, evts} ->
-        case :queue.out(buffer) do
-          {{:value, event}, _new_queue} ->
+    {remaining, new_buffer} = 
+      Enum.reduce(subscribers, {[], buffer}, fn from, {subs, buf} ->
+        case :queue.out(buf) do
+          {{:value, event}, new_queue} ->
             GenStage.reply(from, {:ok, event})
-            {subs, evts}
-
+            {subs, new_queue}  # Don't add this subscriber back to the list!
+            
           {:empty, _} ->
             if completed do
               GenStage.reply(from, :done)
-              {subs, evts}
+              {subs, buf}
             else
-              {[from | subs], evts}
+              {[from | subs], buf}
             end
         end
       end)
-
-    {Enum.reverse(remaining), events}
+    
+    # Return the updated buffer
+    {Enum.reverse(remaining), new_buffer}
   end
 
   defp normalize_event(%{type: "done"}), do: %OpenAI.Agents.Events.StreamComplete{}
-
+  
+  # Handle the simple "done" event type from [DONE] SSE events
+  defp normalize_event(%{type: "done", data: _data}) do
+    %OpenAI.Agents.Events.ResponseCompleted{usage: %{}}
+  end
+  
   defp normalize_event(%{type: "response.created", data: data}) do
+    response = data["response"] || data
     %OpenAI.Agents.Events.ResponseCreated{
-      response_id: data["response_id"],
-      model: data["model"]
+      response_id: response["id"],
+      model: response["model"],
+      created_at: response["created_at"]
     }
   end
-
-  defp normalize_event(%{type: "response.text.delta", data: data}) do
+  
+  defp normalize_event(%{type: "response.output_text.delta", data: data}) do
     %OpenAI.Agents.Events.TextDelta{
-      text: data["text"],
-      index: data["index"]
+      text: data["delta"],
+      index: data["content_index"]
     }
   end
-
+  
   defp normalize_event(%{type: "response.function_call.arguments.delta", data: data}) do
     %OpenAI.Agents.Events.FunctionCallArgumentsDelta{
       arguments: data["arguments"],
@@ -168,13 +165,68 @@ defmodule OpenAI.Agents.StreamHandler do
       index: data["index"]
     }
   end
-
+  
+  # Handle tool calls during streaming
+  defp normalize_event(%{type: "response.output_item.added", data: data}) do
+    item = data["item"]
+    case item["type"] do
+      "function_call" ->
+        %OpenAI.Agents.Events.ToolCall{
+          name: item["name"],
+          call_id: item["id"],
+          arguments: item["arguments"]
+        }
+      _ ->
+        %OpenAI.Agents.Events.Unknown{data: data}
+    end
+  end
+  
   defp normalize_event(%{type: "response.completed", data: data}) do
+    response = data["response"] || data
+    usage = response["usage"] || %{}
+    
+    # Normalize usage to have atom keys
+    normalized_usage = %{
+      total_tokens: usage["total_tokens"] || 0,
+      input_tokens: usage["input_tokens"] || 0,
+      output_tokens: usage["output_tokens"] || 0
+    }
+    
     %OpenAI.Agents.Events.ResponseCompleted{
-      usage: data["usage"]
+      usage: normalized_usage
     }
   end
-
+  
+  defp normalize_event(%{type: "response.in_progress", data: _data}) do
+    # Skip in_progress events - they don't need to be exposed to users
+    nil
+  end
+  
+  defp normalize_event(%{type: "response.function_call_arguments.delta", data: data}) do
+    %OpenAI.Agents.Events.FunctionCallArgumentsDelta{
+      arguments: data["delta"],
+      call_id: data["item_id"],
+      index: data["output_index"]
+    }
+  end
+  
+  defp normalize_event(%{type: "response.function_call_arguments.done", data: _data}) do
+    # Skip function call arguments done events
+    nil
+  end
+  
+  defp normalize_event(%{type: "response.output_item.done", data: _data}) do
+    # Skip output item done events
+    nil
+  end
+  
+  defp normalize_event(%{type: "response.done", data: data}) do
+    response = data["response"] || data
+    %OpenAI.Agents.Events.ResponseCompleted{
+      usage: response["usage"]
+    }
+  end
+  
   defp normalize_event(event) do
     %OpenAI.Agents.Events.Unknown{data: event}
   end
