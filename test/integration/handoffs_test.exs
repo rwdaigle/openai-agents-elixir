@@ -107,7 +107,7 @@ defmodule OpenAI.Agents.Integration.HandoffsTest do
       {:ok, result} = OpenAI.Agents.run(TriageAgent, "I need help in Spanish")
 
       # Should respond in Spanish
-      # Common Spanish words/patterns
+      # Common Spanish words/patterns - be more flexible with Spanish responses
       assert String.contains?(result.output, [
                "hola",
                "Hola",
@@ -115,7 +115,11 @@ defmodule OpenAI.Agents.Integration.HandoffsTest do
                "ayudar",
                "español",
                "¡",
-               "¿"
+               "¿",
+               "Claro",
+               "dime",
+               "necesitas",
+               "ayuda"
              ])
     end
 

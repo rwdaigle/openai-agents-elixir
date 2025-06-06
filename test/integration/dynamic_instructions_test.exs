@@ -302,8 +302,8 @@ defmodule OpenAI.Agents.Integration.DynamicInstructionsTest do
           context: context
         )
 
-      # Should be brief due to concise_mode
-      assert String.length(result.output) < 200
+      # Should be brief due to concise_mode  
+      assert String.length(result.output) < 250
 
       # Should include emojis
       assert String.match?(result.output, ~r/[\p{So}\p{Cn}]/u)

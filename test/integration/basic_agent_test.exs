@@ -36,6 +36,7 @@ defmodule OpenAI.Agents.Integration.BasicAgentTest do
       if state[:runner_pid] do
         send(state[:runner_pid], :agent_started)
       end
+
       {:ok, state}
     end
   end
@@ -114,7 +115,7 @@ defmodule OpenAI.Agents.Integration.BasicAgentTest do
       task = OpenAI.Agents.run_async(Assistant, "Count to 3")
 
       assert %Task{} = task
-      {:ok, result} = Task.await(task)
+      {:ok, result} = Task.await(task, 30_000)
 
       assert result.output
       assert result.usage.total_tokens > 0
@@ -125,8 +126,8 @@ defmodule OpenAI.Agents.Integration.BasicAgentTest do
       task1 = OpenAI.Agents.run_async(Assistant, "What is 2+2?")
       task2 = OpenAI.Agents.run_async(Assistant, "What is 3+3?")
 
-      {:ok, result1} = Task.await(task1)
-      {:ok, result2} = Task.await(task2)
+      {:ok, result1} = Task.await(task1, 30_000)
+      {:ok, result2} = Task.await(task2, 30_000)
 
       assert result1.output =~ "4"
       assert result2.output =~ "6"

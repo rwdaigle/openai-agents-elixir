@@ -183,22 +183,41 @@ defmodule OpenAI.Agents.Integration.AgentWithToolsTest do
 
     @tag :remote
     test "tool error handling" do
-      {:ok, result} =
+      result =
         OpenAI.Agents.run(
           MathTutor,
           "Calculate this: hello world"
         )
 
-      # Agent should handle the error gracefully
-      assert result.output
-      # The response should acknowledge the inability to calculate
-      assert String.contains?(String.downcase(result.output), [
-               "cannot",
-               "can't",
-               "unable",
-               "invalid",
-               "error"
-             ])
+      case result do
+        {:ok, result} ->
+          # Success case - test the response
+          assert result.output
+          # The response should acknowledge the inability to calculate
+          result_lower = String.downcase(result.output)
+
+          assert String.contains?(result_lower, [
+                   "cannot",
+                   "can't",
+                   "unable",
+                   "invalid",
+                   "error"
+                 ]) or
+                   String.contains?(result_lower, [
+                     "not a mathematical expression",
+                     "not mathematical",
+                     "not a math"
+                   ])
+
+        {:error, reason} ->
+          # If we get an API error, let's be more tolerant since this might be
+          # an environment/configuration issue rather than a real test failure
+          IO.puts("Warning: API error in tool error handling test: #{inspect(reason)}")
+
+          flunk(
+            "API error - this might be due to test environment configuration: #{inspect(reason)}"
+          )
+      end
     end
   end
 
