@@ -32,8 +32,10 @@ defmodule OpenAI.Agents.Integration.BasicAgentTest do
 
     @impl true
     def on_start(_context, state) do
-      # Test lifecycle callback
-      send(self(), :agent_started)
+      # Test lifecycle callback - send to runner, which forwards to test process
+      if state[:runner_pid] do
+        send(state[:runner_pid], :agent_started)
+      end
       {:ok, state}
     end
   end
