@@ -30,7 +30,7 @@ defmodule OpenAI.AgentTest do
   describe "get_config/1" do
     test "returns agent configuration" do
       config = OpenAI.Agent.get_config(TestAgent)
-      
+
       assert config.name == "test_agent"
       assert config.instructions == "You are a test agent."
     end
@@ -58,8 +58,8 @@ defmodule OpenAI.AgentTest do
       defmodule InvalidAgent do
       end
 
-      assert {:error, "Agent module must implement configure/0"} = 
-        OpenAI.Agent.validate_agent(InvalidAgent)
+      assert {:error, "Agent module must implement configure/0"} =
+               OpenAI.Agent.validate_agent(InvalidAgent)
     end
   end
 end

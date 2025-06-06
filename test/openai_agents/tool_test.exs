@@ -59,15 +59,16 @@ defmodule OpenAI.Agents.ToolTest do
 
         @impl true
         def schema do
-          %{name: "invalid"}  # Missing required fields
+          # Missing required fields
+          %{name: "invalid"}
         end
 
         @impl true
         def execute(_, _), do: {:ok, nil}
       end
 
-      assert {:error, "Missing required field: description"} = 
-        OpenAI.Agents.Tool.validate_tool(InvalidSchemaTool)
+      assert {:error, "Missing required field: description"} =
+               OpenAI.Agents.Tool.validate_tool(InvalidSchemaTool)
     end
   end
 
@@ -76,31 +77,31 @@ defmodule OpenAI.Agents.ToolTest do
       result = OpenAI.Agents.Tool.to_openai_format(TestTool)
 
       assert result == %{
-        type: "function",
-        name: "test_tool",
-        description: "A test tool",
-        function: %{
-          parameters: %{
-            type: "object",
-            properties: %{
-              input: %{type: "string"}
-            },
-            required: ["input"]
-          }
-        }
-      }
+               type: "function",
+               name: "test_tool",
+               description: "A test tool",
+               function: %{
+                 parameters: %{
+                   type: "object",
+                   properties: %{
+                     input: %{type: "string"}
+                   },
+                   required: ["input"]
+                 }
+               }
+             }
     end
   end
 
   describe "tool execution" do
     test "executes tool successfully" do
-      assert {:ok, %{output: "Processed: hello"}} = 
-        TestTool.execute(%{"input" => "hello"}, %{})
+      assert {:ok, %{output: "Processed: hello"}} =
+               TestTool.execute(%{"input" => "hello"}, %{})
     end
 
     test "handles errors with on_error callback" do
-      assert {:error, "Handled: Tool error!"} = 
-        ErrorTool.on_error(%RuntimeError{message: "Tool error!"}, %{}, %{})
+      assert {:error, "Handled: Tool error!"} =
+               ErrorTool.on_error(%RuntimeError{message: "Tool error!"}, %{}, %{})
     end
   end
 end

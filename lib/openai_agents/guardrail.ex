@@ -1,11 +1,11 @@
 defmodule OpenAI.Agents.Guardrail do
   @moduledoc """
   Defines the behavior for guardrails that validate agent inputs and outputs.
-  
+
   Guardrails can halt agent execution if they detect problematic content.
-  
+
   ## Example
-  
+
       defmodule MyApp.Guardrails.ContentFilter do
         use OpenAI.Agents.Guardrail
         
@@ -53,12 +53,12 @@ defmodule OpenAI.Agents.Guardrail do
   def run_input_guardrails(guardrails, input, state) do
     Enum.reduce_while(guardrails, :ok, fn guardrail, _acc ->
       case run_guardrail(guardrail, :validate_input, [input, state.context]) do
-        :ok -> 
+        :ok ->
           {:cont, :ok}
-          
+
         {:error, reason, metadata} ->
           {:halt, {:error, {guardrail, reason, metadata}}}
-          
+
         other ->
           {:halt, {:error, {:invalid_guardrail_response, guardrail, other}}}
       end
@@ -72,16 +72,16 @@ defmodule OpenAI.Agents.Guardrail do
   def run_output_guardrails(guardrails, output, state) do
     Enum.reduce_while(guardrails, {:ok, output}, fn guardrail, {:ok, current_output} ->
       case run_guardrail(guardrail, :validate_output, [current_output, state.context]) do
-        :ok -> 
+        :ok ->
           {:cont, {:ok, current_output}}
-          
+
         {:ok, modified_output} ->
           # Allow guardrails to modify output
           {:cont, {:ok, modified_output}}
-          
+
         {:error, reason, metadata} ->
           {:halt, {:error, {guardrail, reason, metadata}}}
-          
+
         other ->
           {:halt, {:error, {:invalid_guardrail_response, guardrail, other}}}
       end
@@ -107,11 +107,11 @@ defmodule OpenAI.Agents.Guardrail do
     cond do
       not is_atom(guardrail_module) ->
         {:error, "Guardrail must be a module"}
-        
+
       not (function_exported?(guardrail_module, :validate_input, 2) or
-           function_exported?(guardrail_module, :validate_output, 2)) ->
+               function_exported?(guardrail_module, :validate_output, 2)) ->
         {:error, "Guardrail must implement at least one of validate_input/2 or validate_output/2"}
-        
+
       true ->
         :ok
     end

@@ -1,7 +1,7 @@
 defmodule OpenAI.Agents.Context do
   @moduledoc """
   Manages context state throughout agent execution.
-  
+
   Context provides a way to pass application-specific state through
   the entire agent execution pipeline, accessible to tools, guardrails,
   and lifecycle hooks.
@@ -72,6 +72,7 @@ defmodule OpenAI.Agents.Context do
   def get_user_context(server) when is_pid(server) do
     Agent.get(server, & &1.user_context)
   end
+
   def get_user_context(%__MODULE__{user_context: context}), do: context
 
   @doc """
@@ -80,9 +81,11 @@ defmodule OpenAI.Agents.Context do
   @spec update_usage(pid(), map()) :: :ok
   def update_usage(server, new_usage) do
     Agent.update(server, fn context ->
-      updated_usage = Map.merge(context.usage, new_usage, fn _k, v1, v2 ->
-        v1 + v2
-      end)
+      updated_usage =
+        Map.merge(context.usage, new_usage, fn _k, v1, v2 ->
+          v1 + v2
+        end)
+
       %{context | usage: updated_usage}
     end)
   end

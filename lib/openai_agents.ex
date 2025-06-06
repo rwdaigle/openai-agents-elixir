@@ -1,16 +1,16 @@
 defmodule OpenAI.Agents do
   @moduledoc """
   OpenAI Agents is an Elixir library for building AI agents using OpenAI's Responses API.
-  
+
   This library provides a powerful, idiomatic Elixir framework for creating agents that can:
   - Use tools to perform actions
   - Hand off conversations to other specialized agents
   - Validate inputs and outputs with guardrails
   - Stream responses in real-time
   - Maintain conversation context
-  
+
   ## Quick Start
-  
+
       defmodule MyApp.Assistant do
         use OpenAI.Agent
         
@@ -33,15 +33,15 @@ defmodule OpenAI.Agents do
 
   @doc """
   Runs an agent synchronously with the given input.
-  
+
   ## Options
-  
+
     * `:context` - Application-specific context to pass through execution
     * `:config` - Runtime configuration overrides
     * `:timeout` - Maximum time to wait for completion (default: 60000ms)
-  
+
   ## Examples
-  
+
       OpenAI.Agents.run(MyAgent, "Hello")
       OpenAI.Agents.run(MyAgent, "Hello", context: %{user_id: "123"})
   """
@@ -52,13 +52,13 @@ defmodule OpenAI.Agents do
 
   @doc """
   Runs an agent asynchronously, returning a Task.
-  
+
   ## Options
-  
+
   Same as `run/3`.
-  
+
   ## Examples
-  
+
       task = OpenAI.Agents.run_async(MyAgent, "Hello")
       {:ok, result} = Task.await(task)
   """
@@ -69,15 +69,15 @@ defmodule OpenAI.Agents do
 
   @doc """
   Streams an agent's responses in real-time.
-  
+
   Returns a Stream that emits events as the agent processes the input.
-  
+
   ## Options
-  
+
   Same as `run/3`.
-  
+
   ## Examples
-  
+
       MyAgent
       |> OpenAI.Agents.stream("Tell me a story")
       |> Enum.each(fn event ->

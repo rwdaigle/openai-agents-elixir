@@ -1,7 +1,7 @@
 defmodule OpenAI.Agents.Models.ResponsesAdapter do
   @moduledoc """
   Adapter for the OpenAI Responses API.
-  
+
   Handles communication with the /v1/responses endpoint, including
   both standard and streaming requests.
   """
@@ -19,19 +19,21 @@ defmodule OpenAI.Agents.Models.ResponsesAdapter do
     url = build_url(config)
     headers = build_headers(config)
     body = Jason.encode!(request)
-    
+
     case Finch.build(:post, url, headers, body)
          |> Finch.request(OpenAI.Agents.Finch, receive_timeout: @timeout) do
       {:ok, %{status: 200, body: response_body}} ->
         case Jason.decode(response_body) do
-          {:ok, decoded} -> 
+          {:ok, decoded} ->
             {:ok, normalize_response(decoded)}
-          {:error, error} -> {:error, {:json_decode_error, error}}
+
+          {:error, error} ->
+            {:error, {:json_decode_error, error}}
         end
-        
+
       {:ok, %{status: status, body: body}} ->
         {:error, {:api_error, status, body}}
-        
+
       {:error, error} ->
         {:error, {:network_error, error}}
     end
@@ -42,7 +44,7 @@ defmodule OpenAI.Agents.Models.ResponsesAdapter do
     url = build_url(config)
     headers = build_headers(config)
     body = Jason.encode!(Map.put(request, :stream, true))
-    
+
     Stream.resource(
       fn -> start_streaming(url, headers, body) end,
       &stream_next/1,
@@ -65,39 +67,48 @@ defmodule OpenAI.Agents.Models.ResponsesAdapter do
 
   defp build_extra_headers(config) do
     extra = config[:extra_headers] || %{}
-    
+
     Enum.map(extra, fn {k, v} -> {to_string(k), to_string(v)} end)
   end
 
   defp normalize_response(response) do
     # The Responses API returns output as an array of messages
     output_messages = response["output"] || []
-    
+
     # Convert output messages to the expected format
-    output = Enum.flat_map(output_messages, fn message ->
-      case message["type"] do
-        "message" ->
-          # Extract content items from the message
-          content_items = message["content"] || []
-          Enum.map(content_items, fn content ->
-            case content["type"] do
-              "output_text" -> %{type: "text", text: content["text"]}
-              "tool_use" -> %{
-                type: "function_call",
-                id: content["id"],
-                name: content["name"],
-                arguments: content["arguments"]
-              }
-              _ -> content
-            end
-          end)
-        "handoff" ->
-          [%{type: "handoff", target: message["target"]}]
-        _ ->
-          []
-      end
-    end)
-    
+    output =
+      Enum.flat_map(output_messages, fn message ->
+        case message["type"] do
+          "message" ->
+            # Extract content items from the message
+            content_items = message["content"] || []
+
+            Enum.map(content_items, fn content ->
+              case content["type"] do
+                "output_text" ->
+                  %{type: "text", text: content["text"]}
+
+                "tool_use" ->
+                  %{
+                    type: "function_call",
+                    id: content["id"],
+                    name: content["name"],
+                    arguments: content["arguments"]
+                  }
+
+                _ ->
+                  content
+              end
+            end)
+
+          "handoff" ->
+            [%{type: "handoff", target: message["target"]}]
+
+          _ ->
+            []
+        end
+      end)
+
     %{
       output: output,
       usage: response["usage"] || %{},
@@ -108,18 +119,19 @@ defmodule OpenAI.Agents.Models.ResponsesAdapter do
   end
 
   defp start_streaming(url, headers, body) do
-    ref = Finch.build(:post, url, headers, body)
-          |> Finch.stream_while(
-            OpenAI.Agents.Finch,
-            nil,
-            fn
-              {:status, status}, acc when status == 200 -> {:cont, acc}
-              {:status, status}, _acc -> {:halt, {:error, status}}
-              {:headers, _headers}, acc -> {:cont, acc}
-              {:data, data}, _acc -> {:cont, {:data, data}}
-            end
-          )
-    
+    ref =
+      Finch.build(:post, url, headers, body)
+      |> Finch.stream_while(
+        OpenAI.Agents.Finch,
+        nil,
+        fn
+          {:status, status}, acc when status == 200 -> {:cont, acc}
+          {:status, status}, _acc -> {:halt, {:error, status}}
+          {:headers, _headers}, acc -> {:cont, acc}
+          {:data, data}, _acc -> {:cont, {:data, data}}
+        end
+      )
+
     {ref, ""}
   end
 
@@ -131,15 +143,14 @@ defmodule OpenAI.Agents.Models.ResponsesAdapter do
     receive do
       {:data, chunk} ->
         {events, new_buffer} = parse_sse_chunk(buffer <> chunk)
-        
+
         case events do
           [] -> stream_next({ref, new_buffer})
           _ -> {events, {ref, new_buffer}}
         end
-        
+
       {:done, _ref} ->
         {:halt, {ref, buffer}}
-        
     after
       @timeout ->
         {:halt, {:error, :timeout}}
@@ -153,14 +164,14 @@ defmodule OpenAI.Agents.Models.ResponsesAdapter do
 
   defp parse_sse_chunk(chunk) do
     lines = String.split(chunk, "\n")
-    
+
     {events, remaining} = parse_lines(lines, [], "")
-    
+
     {Enum.reverse(events), remaining}
   end
 
   defp parse_lines([], events, buffer), do: {events, buffer}
-  
+
   defp parse_lines([line | rest], events, buffer) do
     cond do
       # Empty line marks end of event
@@ -169,12 +180,12 @@ defmodule OpenAI.Agents.Models.ResponsesAdapter do
           {:ok, event} -> parse_lines(rest, [event | events], "")
           {:error, _} -> parse_lines(rest, events, "")
         end
-        
+
       # Data line
       String.starts_with?(line, "data: ") ->
         data = String.trim_leading(line, "data: ")
         parse_lines(rest, events, buffer <> data)
-        
+
       # Skip other SSE fields for now
       true ->
         parse_lines(rest, events, buffer)
@@ -182,7 +193,7 @@ defmodule OpenAI.Agents.Models.ResponsesAdapter do
   end
 
   defp parse_event("[DONE]"), do: {:ok, %{type: "done"}}
-  
+
   defp parse_event(data) do
     case Jason.decode(data) do
       {:ok, decoded} -> {:ok, normalize_stream_event(decoded)}

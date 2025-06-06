@@ -1,7 +1,7 @@
 defmodule OpenAI.Agents.Handoff do
   @moduledoc """
   Manages handoffs between agents.
-  
+
   Handoffs allow one agent to delegate control to another agent,
   optionally filtering the conversation history.
   """
@@ -36,7 +36,7 @@ defmodule OpenAI.Agents.Handoff do
 
   def to_tool_schema(%{target: target} = handoff) do
     agent_config = OpenAI.Agent.get_config(target)
-    
+
     %{
       type: "function",
       name: "handoff_to_#{agent_config.name}",
@@ -50,44 +50,45 @@ defmodule OpenAI.Agents.Handoff do
   @doc """
   Executes a handoff.
   """
-  @spec execute(map(), [module() | handoff_config()], map()) :: 
-    {:ok, module(), list()} | {:error, term()}
+  @spec execute(map(), [module() | handoff_config()], map()) ::
+          {:ok, module(), list()} | {:error, term()}
   def execute(handoff_call, available_handoffs, state) do
     tool_name = handoff_call[:name] || handoff_call["name"]
-    
+
     # Find the matching handoff
     case find_handoff(tool_name, available_handoffs) do
       nil ->
         {:error, "Unknown handoff: #{tool_name}"}
-        
+
       handoff ->
         # Get the target agent
         target = if is_atom(handoff), do: handoff, else: handoff.target
-        
+
         # Filter conversation if needed
-        filtered_conversation = 
+        filtered_conversation =
           if is_map(handoff) and handoff.input_filter do
             apply_filter(handoff.input_filter, state.conversation, state)
           else
             state.conversation
           end
-        
+
         {:ok, target, filtered_conversation}
     end
   end
 
   defp find_handoff(tool_name, handoffs) do
     Enum.find(handoffs, fn handoff ->
-      expected_name = case handoff do
-        module when is_atom(module) ->
-          config = OpenAI.Agent.get_config(module)
-          "handoff_to_#{config.name}"
-          
-        %{target: target} ->
-          config = OpenAI.Agent.get_config(target)
-          "handoff_to_#{config.name}"
-      end
-      
+      expected_name =
+        case handoff do
+          module when is_atom(module) ->
+            config = OpenAI.Agent.get_config(module)
+            "handoff_to_#{config.name}"
+
+          %{target: target} ->
+            config = OpenAI.Agent.get_config(target)
+            "handoff_to_#{config.name}"
+        end
+
       tool_name == expected_name
     end)
   end

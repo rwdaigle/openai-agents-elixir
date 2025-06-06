@@ -14,7 +14,7 @@ defmodule OpenAI.Agents.TracingSupervisor do
     children = [
       # Trace collector for aggregating trace data
       {OpenAI.Agents.TraceCollector, []},
-      
+
       # Dynamic supervisor for trace processors
       {DynamicSupervisor, name: OpenAI.Agents.TraceProcessorSupervisor, strategy: :one_for_one}
     ]
@@ -60,12 +60,12 @@ defmodule OpenAI.Agents.TraceCollector do
   @impl true
   def init(_opts) do
     processors = Application.get_env(:openai_agents, :trace_processors, [])
-    
+
     state = %__MODULE__{
       traces: %{},
       processors: start_processors(processors)
     }
-    
+
     {:ok, state}
   end
 
@@ -78,12 +78,12 @@ defmodule OpenAI.Agents.TraceCollector do
       started_at: DateTime.utc_now(),
       status: :active
     }
-    
+
     new_traces = Map.put(state.traces, trace_id, trace)
-    
+
     # Notify processors
     notify_processors(state.processors, {:trace_started, trace})
-    
+
     {:noreply, %{state | traces: new_traces}}
   end
 
@@ -93,14 +93,14 @@ defmodule OpenAI.Agents.TraceCollector do
       nil ->
         Logger.warning("Attempted to add span to non-existent trace: #{trace_id}")
         {:noreply, state}
-        
+
       trace ->
         updated_trace = %{trace | spans: [span | trace.spans]}
         new_traces = Map.put(state.traces, trace_id, updated_trace)
-        
+
         # Notify processors
         notify_processors(state.processors, {:span_added, trace_id, span})
-        
+
         {:noreply, %{state | traces: new_traces}}
     end
   end
@@ -111,19 +111,16 @@ defmodule OpenAI.Agents.TraceCollector do
       nil ->
         Logger.warning("Attempted to end non-existent trace: #{trace_id}")
         {:noreply, state}
-        
+
       trace ->
-        completed_trace = %{trace | 
-          status: :completed,
-          ended_at: DateTime.utc_now()
-        }
-        
+        completed_trace = %{trace | status: :completed, ended_at: DateTime.utc_now()}
+
         # Notify processors
         notify_processors(state.processors, {:trace_completed, completed_trace})
-        
+
         # Remove trace after processing (or keep based on config)
         new_traces = Map.delete(state.traces, trace_id)
-        
+
         {:noreply, %{state | traces: new_traces}}
     end
   end
@@ -138,17 +135,21 @@ defmodule OpenAI.Agents.TraceCollector do
   defp start_processors(processor_configs) do
     Enum.map(processor_configs, fn
       {module, opts} ->
-        {:ok, pid} = DynamicSupervisor.start_child(
-          OpenAI.Agents.TraceProcessorSupervisor,
-          {module, opts}
-        )
+        {:ok, pid} =
+          DynamicSupervisor.start_child(
+            OpenAI.Agents.TraceProcessorSupervisor,
+            {module, opts}
+          )
+
         pid
-        
+
       module when is_atom(module) ->
-        {:ok, pid} = DynamicSupervisor.start_child(
-          OpenAI.Agents.TraceProcessorSupervisor,
-          {module, []}
-        )
+        {:ok, pid} =
+          DynamicSupervisor.start_child(
+            OpenAI.Agents.TraceProcessorSupervisor,
+            {module, []}
+          )
+
         pid
     end)
   end

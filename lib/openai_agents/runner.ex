@@ -8,6 +8,7 @@ defmodule OpenAI.Agents.Runner do
   require Logger
 
   alias OpenAI.Agent
+
   alias OpenAI.Agents.{
     Context,
     Models.ResponsesAdapter,
@@ -42,9 +43,9 @@ defmodule OpenAI.Agents.Runner do
   """
   def run(agent_module, input, opts \\ []) do
     timeout = Keyword.get(opts, :timeout, @default_timeout)
-    
+
     {:ok, runner} = start_link(agent_module, input, opts)
-    
+
     try do
       GenServer.call(runner, :run, timeout)
     after
@@ -67,7 +68,7 @@ defmodule OpenAI.Agents.Runner do
   def stream(agent_module, input, opts \\ []) do
     {:ok, runner} = start_link(agent_module, input, opts)
     {:ok, producer} = GenServer.call(runner, :get_stream_producer)
-    
+
     Stream.resource(
       fn -> {runner, producer} end,
       fn {runner, producer} ->
@@ -89,7 +90,7 @@ defmodule OpenAI.Agents.Runner do
   @impl true
   def init({agent_module, input, opts}) do
     trace_id = Keyword.get(opts, :trace_id, generate_trace_id())
-    
+
     state = %__MODULE__{
       agent_module: agent_module,
       context: init_context(opts[:context]),
@@ -101,10 +102,10 @@ defmodule OpenAI.Agents.Runner do
       usage: %Usage{},
       start_time: System.monotonic_time()
     }
-    
+
     # Start telemetry span
     Telemetry.start_run(state)
-    
+
     {:ok, state}
   end
 
@@ -114,7 +115,7 @@ defmodule OpenAI.Agents.Runner do
       {:ok, result, final_state} ->
         Telemetry.stop_run(final_state, :ok)
         {:reply, {:ok, result}, final_state}
-        
+
       {:error, reason, final_state} ->
         Telemetry.stop_run(final_state, {:error, reason})
         {:reply, {:error, reason}, final_state}
@@ -144,15 +145,16 @@ defmodule OpenAI.Agents.Runner do
          {:ok, state} <- run_input_guardrails(state),
          {:ok, response, state} <- call_model(instructions, state),
          {:ok, result, state} <- process_response(response, state) do
-      
       if result.is_final do
         {:ok, finalize_result(result, state), state}
       else
         # Continue the loop
-        state = %{state | 
-          conversation: state.conversation ++ result.new_items,
-          current_turn: state.current_turn + 1
+        state = %{
+          state
+          | conversation: state.conversation ++ result.new_items,
+            current_turn: state.current_turn + 1
         }
+
         execute_agent_loop(state)
       end
     end
@@ -161,11 +163,12 @@ defmodule OpenAI.Agents.Runner do
   defp check_turn_limit(%{current_turn: turn, max_turns: max} = state) when turn >= max do
     {:error, {:max_turns_exceeded, turn}, state}
   end
+
   defp check_turn_limit(state), do: {:ok, state}
 
   defp run_agent_lifecycle(callback, state) do
     agent_module = state.agent_module
-    
+
     if function_exported?(agent_module, callback, 2) do
       case apply(agent_module, callback, [state.context, %{}]) do
         {:ok, _} -> {:ok, state}
@@ -179,7 +182,7 @@ defmodule OpenAI.Agents.Runner do
   defp run_input_guardrails(state) do
     config = Agent.get_config(state.agent_module)
     guardrails = Map.get(config, :input_guardrails, [])
-    
+
     case Guardrail.run_input_guardrails(guardrails, state.conversation, state) do
       :ok -> {:ok, state}
       {:error, reason} -> {:error, {:guardrail_triggered, reason}, state}
@@ -188,11 +191,11 @@ defmodule OpenAI.Agents.Runner do
 
   defp call_model(instructions, state) do
     config = Agent.get_config(state.agent_module)
-    
+
     request = build_request(instructions, state.conversation, config, state)
-    
+
     adapter = get_model_adapter(config)
-    
+
     case state.stream_producer do
       nil ->
         # Non-streaming call
@@ -200,21 +203,21 @@ defmodule OpenAI.Agents.Runner do
           {:ok, response} ->
             usage = update_usage(state.usage, response.usage)
             {:ok, response, %{state | usage: usage}}
-            
+
           {:error, reason} ->
             {:error, {:api_error, reason}, state}
         end
-        
+
       producer ->
         # Streaming call
         Task.start_link(fn ->
           adapter.create_stream(request, get_api_config(state))
           |> Stream.each(&StreamHandler.emit(producer, &1))
           |> Stream.run()
-          
+
           StreamHandler.complete(producer)
         end)
-        
+
         # For streaming, we return a placeholder response
         {:ok, %{output: [], usage: %{}}, state}
     end
@@ -222,32 +225,32 @@ defmodule OpenAI.Agents.Runner do
 
   defp process_response(response, state) do
     output_items = response.output || []
-    
+
     # Group items by type
     {text_items, function_calls, handoffs} = categorize_output_items(output_items)
-    
+
     cond do
       # Check if we have a final text response
       length(text_items) > 0 and length(function_calls) == 0 and length(handoffs) == 0 ->
         final_output = combine_text_items(text_items)
-        
+
         # Run output guardrails
         case run_output_guardrails(final_output, state) do
           {:ok, validated_output} ->
             {:ok, %{is_final: true, output: validated_output, new_items: []}, state}
-            
+
           {:error, reason} ->
             {:error, {:output_guardrail_triggered, reason}, state}
         end
-        
+
       # Execute function calls
       length(function_calls) > 0 ->
         execute_function_calls(function_calls, state)
-        
+
       # Process handoff
       length(handoffs) > 0 ->
         process_handoff(hd(handoffs), state)
-        
+
       true ->
         {:error, {:unexpected_response, "No actionable items in response"}, state}
     end
@@ -258,13 +261,13 @@ defmodule OpenAI.Agents.Runner do
       case item do
         %{type: "text", text: _} = text_item ->
           {[text_item | texts], functions, handoffs}
-          
+
         %{type: "function_call"} = function_call ->
           {texts, [function_call | functions], handoffs}
-          
+
         %{type: "handoff"} = handoff ->
           {texts, functions, [handoff | handoffs]}
-          
+
         _ ->
           {texts, functions, handoffs}
       end
@@ -277,38 +280,41 @@ defmodule OpenAI.Agents.Runner do
   defp execute_function_calls(function_calls, state) do
     config = Agent.get_config(state.agent_module)
     tools = Map.get(config, :tools, [])
-    
+
     # Execute all function calls in parallel
     results = ToolExecutor.execute_parallel(function_calls, tools, state.context)
-    
+
     # Convert results to conversation items
-    new_items = Enum.map(results, fn {call_id, result} ->
-      %{
-        type: "function_call_result",
-        call_id: call_id,
-        result: encode_result(result)
-      }
-    end)
-    
+    new_items =
+      Enum.map(results, fn {call_id, result} ->
+        %{
+          type: "function_call_result",
+          call_id: call_id,
+          result: encode_result(result)
+        }
+      end)
+
     {:ok, %{is_final: false, output: nil, new_items: new_items}, state}
   end
 
   defp process_handoff(handoff, state) do
     config = Agent.get_config(state.agent_module)
     handoffs = Map.get(config, :handoffs, [])
-    
+
     case Handoff.execute(handoff, handoffs, state) do
       {:ok, new_agent_module, filtered_conversation} ->
         # Switch to the new agent
-        new_state = %{state |
-          agent_module: new_agent_module,
-          conversation: filtered_conversation,
-          current_turn: 0  # Reset turn counter for new agent
+        new_state = %{
+          state
+          | agent_module: new_agent_module,
+            conversation: filtered_conversation,
+            # Reset turn counter for new agent
+            current_turn: 0
         }
-        
+
         # Continue execution with new agent
         execute_agent_loop(new_state)
-        
+
       {:error, reason} ->
         {:error, {:handoff_failed, reason}, state}
     end
@@ -317,13 +323,13 @@ defmodule OpenAI.Agents.Runner do
   defp run_output_guardrails(output, state) do
     config = Agent.get_config(state.agent_module)
     guardrails = Map.get(config, :output_guardrails, [])
-    
+
     Guardrail.run_output_guardrails(guardrails, output, state)
   end
 
   defp build_request(instructions, conversation, config, state) do
     tools = prepare_tools(config, state)
-    
+
     base_request = %{
       model: Map.get(config, :model, "gpt-4.1-mini"),
       instructions: instructions,
@@ -335,27 +341,31 @@ defmodule OpenAI.Agents.Runner do
       parallel_tool_calls: get_in(config, [:model_settings, :parallel_tool_calls]) != false,
       stream: state.stream_producer != nil
     }
-    
+
     # Add response format if configured
-    base_request = case Map.get(config, :output_schema) do
-      nil -> base_request
-      schema_module -> 
-        # Extract just the module name from the full module path
-        module_name = schema_module
-        |> to_string()
-        |> String.split(".")
-        |> List.last()
-        |> String.replace(~r/[^a-zA-Z0-9_]/, "_")
-        
-        Map.put(base_request, :text, %{
-          format: %{
-            type: "json_schema",
-            name: module_name,
-            schema: schema_module.json_schema()
-          }
-        })
-    end
-    
+    base_request =
+      case Map.get(config, :output_schema) do
+        nil ->
+          base_request
+
+        schema_module ->
+          # Extract just the module name from the full module path
+          module_name =
+            schema_module
+            |> to_string()
+            |> String.split(".")
+            |> List.last()
+            |> String.replace(~r/[^a-zA-Z0-9_]/, "_")
+
+          Map.put(base_request, :text, %{
+            format: %{
+              type: "json_schema",
+              name: module_name,
+              schema: schema_module.json_schema()
+            }
+          })
+      end
+
     base_request
     |> Enum.reject(fn {_, v} -> is_nil(v) end)
     |> Map.new()
@@ -364,17 +374,19 @@ defmodule OpenAI.Agents.Runner do
   defp prepare_tools(config, _state) do
     tools = Map.get(config, :tools, [])
     handoffs = Map.get(config, :handoffs, [])
-    
-    tool_schemas = Enum.map(tools, fn tool_module ->
-      schema = apply(tool_module, :schema, [])
-      Map.put(schema, :type, "function")
-    end)
-    
-    handoff_schemas = Enum.map(handoffs, fn handoff ->
-      schema = Handoff.to_tool_schema(handoff)
-      Map.put(schema, :type, "function")
-    end)
-    
+
+    tool_schemas =
+      Enum.map(tools, fn tool_module ->
+        schema = apply(tool_module, :schema, [])
+        Map.put(schema, :type, "function")
+      end)
+
+    handoff_schemas =
+      Enum.map(handoffs, fn handoff ->
+        schema = Handoff.to_tool_schema(handoff)
+        Map.put(schema, :type, "function")
+      end)
+
     tool_schemas ++ handoff_schemas
   end
 
@@ -408,7 +420,7 @@ defmodule OpenAI.Agents.Runner do
 
   defp get_api_key do
     # Priority order: runtime env var > config > error
-    System.get_env("OPENAI_API_KEY") || 
+    System.get_env("OPENAI_API_KEY") ||
       Application.get_env(:openai_agents, :api_key) ||
       raise "OpenAI API key not configured. Set OPENAI_API_KEY environment variable or configure in config files."
   end
@@ -418,11 +430,11 @@ defmodule OpenAI.Agents.Runner do
     cond do
       System.get_env("OPENAI_BASE_URL") ->
         System.get_env("OPENAI_BASE_URL")
-        
+
       Mix.env() == :test and System.get_env("OPENAI_API_KEY") ->
         # In test mode with real API key, use real endpoint
         "https://api.openai.com/v1"
-        
+
       true ->
         Application.get_env(:openai_agents, :base_url, "https://api.openai.com/v1")
     end
@@ -434,6 +446,7 @@ defmodule OpenAI.Agents.Runner do
   defp normalize_input(input) when is_binary(input) do
     [%{type: "message", role: "user", content: input}]
   end
+
   defp normalize_input(input) when is_list(input), do: input
 
   defp generate_trace_id do
@@ -444,8 +457,10 @@ defmodule OpenAI.Agents.Runner do
     # The Responses API uses different field names for usage
     prompt_tokens = new_usage["input_tokens"] || new_usage[:prompt_tokens] || 0
     completion_tokens = new_usage["output_tokens"] || new_usage[:completion_tokens] || 0
-    total_tokens = new_usage["total_tokens"] || new_usage[:total_tokens] || (prompt_tokens + completion_tokens)
-    
+
+    total_tokens =
+      new_usage["total_tokens"] || new_usage[:total_tokens] || prompt_tokens + completion_tokens
+
     %Usage{
       prompt_tokens: current_usage.prompt_tokens + prompt_tokens,
       completion_tokens: current_usage.completion_tokens + completion_tokens,
@@ -467,11 +482,12 @@ defmodule OpenAI.Agents.Runner do
       output: result.output,
       usage: state.usage,
       trace_id: state.trace_id,
-      duration_ms: System.convert_time_unit(
-        System.monotonic_time() - state.start_time,
-        :native,
-        :millisecond
-      )
+      duration_ms:
+        System.convert_time_unit(
+          System.monotonic_time() - state.start_time,
+          :native,
+          :millisecond
+        )
     }
   end
 end

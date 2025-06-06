@@ -1,12 +1,12 @@
 defmodule OpenAI.Agent do
   @moduledoc """
   Defines the behavior for OpenAI agents.
-  
+
   An agent is a module that can process inputs, use tools, delegate to other agents,
   and produce structured outputs.
-  
+
   ## Example
-  
+
       defmodule MyApp.WeatherAgent do
         use OpenAI.Agent
         
@@ -77,25 +77,25 @@ defmodule OpenAI.Agent do
   @spec get_instructions(module(), map()) :: {:ok, String.t()} | {:error, term()}
   def get_instructions(agent_module, context) do
     config = get_config(agent_module)
-    
+
     case config.instructions do
       instructions when is_binary(instructions) ->
         {:ok, instructions}
-        
+
       instructions_fn when is_function(instructions_fn, 1) ->
         try do
           {:ok, instructions_fn.(context)}
         rescue
           e -> {:error, e}
         end
-        
+
       instructions_fn when is_function(instructions_fn, 2) ->
         try do
           {:ok, instructions_fn.(context, agent_module)}
         rescue
           e -> {:error, e}
         end
-        
+
       _ ->
         {:error, "Invalid instructions type"}
     end

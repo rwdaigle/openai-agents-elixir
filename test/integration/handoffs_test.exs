@@ -4,31 +4,33 @@ defmodule OpenAI.Agents.Integration.HandoffsTest do
 
   defmodule SpanishAgent do
     use OpenAI.Agent
-    
+
     @impl true
     def configure do
       %{
         name: "spanish_agent",
-        instructions: "You only speak Spanish. Respond to all queries in Spanish. Keep responses brief."
+        instructions:
+          "You only speak Spanish. Respond to all queries in Spanish. Keep responses brief."
       }
     end
   end
 
   defmodule FrenchAgent do
     use OpenAI.Agent
-    
+
     @impl true
     def configure do
       %{
-        name: "french_agent", 
-        instructions: "You only speak French. Respond to all queries in French. Keep responses brief."
+        name: "french_agent",
+        instructions:
+          "You only speak French. Respond to all queries in French. Keep responses brief."
       }
     end
   end
 
   defmodule EnglishAgent do
     use OpenAI.Agent
-    
+
     @impl true
     def configure do
       %{
@@ -40,7 +42,7 @@ defmodule OpenAI.Agents.Integration.HandoffsTest do
 
   defmodule TriageAgent do
     use OpenAI.Agent
-    
+
     @impl true
     def configure do
       %{
@@ -59,7 +61,7 @@ defmodule OpenAI.Agents.Integration.HandoffsTest do
 
   defmodule MathExpert do
     use OpenAI.Agent
-    
+
     @impl true
     def configure do
       %{
@@ -71,7 +73,7 @@ defmodule OpenAI.Agents.Integration.HandoffsTest do
 
   defmodule WritingAssistant do
     use OpenAI.Agent
-    
+
     @impl true
     def configure do
       %{
@@ -83,7 +85,7 @@ defmodule OpenAI.Agents.Integration.HandoffsTest do
 
   defmodule GeneralAssistant do
     use OpenAI.Agent
-    
+
     @impl true
     def configure do
       %{
@@ -103,25 +105,41 @@ defmodule OpenAI.Agents.Integration.HandoffsTest do
     @tag :remote
     test "triage agent hands off to Spanish agent" do
       {:ok, result} = OpenAI.Agents.run(TriageAgent, "I need help in Spanish")
-      
+
       # Should respond in Spanish
       # Common Spanish words/patterns
-      assert String.contains?(result.output, ["hola", "Hola", "puedo", "ayudar", "español", "¡", "¿"])
+      assert String.contains?(result.output, [
+               "hola",
+               "Hola",
+               "puedo",
+               "ayudar",
+               "español",
+               "¡",
+               "¿"
+             ])
     end
 
     @tag :remote
     test "triage agent hands off to French agent" do
       {:ok, result} = OpenAI.Agents.run(TriageAgent, "I need help in French")
-      
+
       # Should respond in French
       # Common French words/patterns
-      assert String.contains?(result.output, ["bonjour", "Bonjour", "puis", "aider", "français", "Je", "vous"])
+      assert String.contains?(result.output, [
+               "bonjour",
+               "Bonjour",
+               "puis",
+               "aider",
+               "français",
+               "Je",
+               "vous"
+             ])
     end
 
     @tag :remote
     test "triage agent handles unknown language request" do
       {:ok, result} = OpenAI.Agents.run(TriageAgent, "I need help in Klingon")
-      
+
       # Should mention available languages
       assert String.contains?(String.downcase(result.output), ["spanish", "french", "english"])
     end
@@ -131,29 +149,31 @@ defmodule OpenAI.Agents.Integration.HandoffsTest do
     @tag :remote
     test "general assistant hands off math questions" do
       {:ok, result} = OpenAI.Agents.run(GeneralAssistant, "What is the derivative of x^2 + 3x?")
-      
+
       # Should show mathematical work
       assert String.contains?(result.output, ["2x", "derivative", "3"])
     end
 
     @tag :remote
     test "general assistant hands off writing questions" do
-      {:ok, result} = OpenAI.Agents.run(
-        GeneralAssistant, 
-        "What's the difference between 'affect' and 'effect'?"
-      )
-      
+      {:ok, result} =
+        OpenAI.Agents.run(
+          GeneralAssistant,
+          "What's the difference between 'affect' and 'effect'?"
+        )
+
       # Should explain grammar
       assert String.contains?(String.downcase(result.output), ["affect", "effect", "verb", "noun"])
     end
 
     @tag :remote
     test "general assistant handles general questions itself" do
-      {:ok, result} = OpenAI.Agents.run(
-        GeneralAssistant, 
-        "What is the capital of Japan?"
-      )
-      
+      {:ok, result} =
+        OpenAI.Agents.run(
+          GeneralAssistant,
+          "What is the capital of Japan?"
+        )
+
       assert String.contains?(result.output, "Tokyo")
     end
   end
@@ -161,24 +181,26 @@ defmodule OpenAI.Agents.Integration.HandoffsTest do
   describe "handoff with context preservation" do
     defmodule ContextPreservingAgent do
       use OpenAI.Agent
-      
+
       @impl true
       def configure do
         %{
           name: "context_agent",
-          instructions: "You help users. If they ask about their ID, check the context and respond.",
+          instructions:
+            "You help users. If they ask about their ID, check the context and respond."
         }
       end
     end
 
     defmodule MainAgent do
       use OpenAI.Agent
-      
-      @impl true 
+
+      @impl true
       def configure do
         %{
           name: "main_agent",
-          instructions: "You are the main agent. If asked about user info, hand off to context_agent.",
+          instructions:
+            "You are the main agent. If asked about user info, hand off to context_agent.",
           handoffs: [ContextPreservingAgent]
         }
       end
@@ -187,13 +209,14 @@ defmodule OpenAI.Agents.Integration.HandoffsTest do
     @tag :remote
     test "context is preserved during handoff" do
       context = %{user_id: "test-123", name: "Alice"}
-      
-      {:ok, result} = OpenAI.Agents.run(
-        MainAgent,
-        "What is my user ID?",
-        context: context
-      )
-      
+
+      {:ok, result} =
+        OpenAI.Agents.run(
+          MainAgent,
+          "What is my user ID?",
+          context: context
+        )
+
       # The agent should be able to reference context even after handoff
       assert result.output
     end
@@ -202,24 +225,25 @@ defmodule OpenAI.Agents.Integration.HandoffsTest do
   describe "complex handoff chains" do
     defmodule LevelOneAgent do
       use OpenAI.Agent
-      
+
       @impl true
       def configure do
         %{
           name: "level_one",
           instructions: "You are level one. If asked to go deeper, hand off to level_two.",
-          handoffs: []  # Will be set dynamically
+          # Will be set dynamically
+          handoffs: []
         }
       end
     end
 
     defmodule LevelTwoAgent do
       use OpenAI.Agent
-      
+
       @impl true
       def configure do
         %{
-          name: "level_two", 
+          name: "level_two",
           instructions: "You are level two. Say 'Level two reached!' and answer the question."
         }
       end
@@ -232,7 +256,7 @@ defmodule OpenAI.Agents.Integration.HandoffsTest do
       # For complex handoff chains, we'd need to modify our setup
       # This is a simplified test
       {:ok, result} = OpenAI.Agents.run(LevelTwoAgent, "Hello from level one!")
-      
+
       assert String.contains?(result.output, ["two", "Two", "2"])
     end
   end

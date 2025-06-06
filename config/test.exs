@@ -12,7 +12,8 @@ config :openai_agents,
   api_key: System.get_env("OPENAI_API_KEY") || "test-api-key",
   base_url: System.get_env("OPENAI_BASE_URL") || "https://api.openai.com/v1",
   max_turns: 5,
-  timeout: 30_000  # Increased timeout for remote tests
+  # Increased timeout for remote tests
+  timeout: 30_000
 
 # Configure logging for tests
 config :logger, level: :warning

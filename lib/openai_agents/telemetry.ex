@@ -1,11 +1,11 @@
 defmodule OpenAI.Agents.Telemetry do
   @moduledoc """
   Telemetry integration for OpenAI Agents.
-  
+
   Emits telemetry events for agent execution, tool calls, and API requests.
-  
+
   ## Events
-  
+
   * `[:openai_agents, :run, :start]` - Emitted when an agent run starts
   * `[:openai_agents, :run, :stop]` - Emitted when an agent run completes
   * `[:openai_agents, :agent, :start]` - Emitted when an agent starts processing
@@ -15,13 +15,13 @@ defmodule OpenAI.Agents.Telemetry do
   * `[:openai_agents, :handoff, :start]` - Emitted when a handoff starts
   * `[:openai_agents, :api, :request, :start]` - Emitted when an API request starts
   * `[:openai_agents, :api, :request, :stop]` - Emitted when an API request completes
-  
+
   ## Measurements
-  
+
   All `:stop` events include a `:duration` measurement in native time units.
-  
+
   ## Metadata
-  
+
   Events include relevant metadata such as:
   * `:agent_module` - The agent module
   * `:trace_id` - The trace ID for the run
@@ -152,10 +152,11 @@ defmodule OpenAI.Agents.Telemetry do
   Emits a tool stop event.
   """
   def stop_tool(tool_name, call_id, result) do
-    {status, error} = case result do
-      {:ok, _} -> {:ok, nil}
-      {:error, reason} -> {:error, reason}
-    end
+    {status, error} =
+      case result do
+        {:ok, _} -> {:ok, nil}
+        {:error, reason} -> {:error, reason}
+      end
 
     metadata = %{
       tool_name: tool_name,
@@ -232,14 +233,14 @@ defmodule OpenAI.Agents.Telemetry do
   defp handle_event(event, measurements, metadata, _config) do
     case event do
       [:openai_agents, :run, :start] ->
-        Logger.info("Agent run started", 
+        Logger.info("Agent run started",
           agent: metadata.agent_module,
           trace_id: metadata.trace_id
         )
 
       [:openai_agents, :run, :stop] ->
         duration_ms = System.convert_time_unit(measurements.duration, :native, :millisecond)
-        
+
         Logger.info("Agent run completed",
           agent: metadata.agent_module,
           trace_id: metadata.trace_id,
@@ -263,7 +264,7 @@ defmodule OpenAI.Agents.Telemetry do
 
       [:openai_agents, :api, :request, :stop] ->
         duration_ms = System.convert_time_unit(measurements.duration, :native, :millisecond)
-        
+
         Logger.debug("API request completed",
           method: metadata.method,
           endpoint: metadata.endpoint,

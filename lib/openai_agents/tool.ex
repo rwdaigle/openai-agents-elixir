@@ -1,12 +1,12 @@
 defmodule OpenAI.Agents.Tool do
   @moduledoc """
   Defines the behavior for tools that agents can use.
-  
+
   Tools are modules that implement specific functionality that agents can call
   during their execution.
-  
+
   ## Example
-  
+
       defmodule MyApp.Tools.GetWeather do
         use OpenAI.Agents.Tool
         
@@ -84,7 +84,7 @@ defmodule OpenAI.Agents.Tool do
 
   defp validate_schema(module) do
     schema = module.schema()
-    
+
     with :ok <- validate_field(schema, :name, &is_binary/1),
          :ok <- validate_field(schema, :description, &is_binary/1),
          :ok <- validate_field(schema, :parameters, &is_map/1) do
@@ -94,7 +94,9 @@ defmodule OpenAI.Agents.Tool do
 
   defp validate_field(map, field, validator) do
     case Map.get(map, field) do
-      nil -> {:error, "Missing required field: #{field}"}
+      nil ->
+        {:error, "Missing required field: #{field}"}
+
       value ->
         if validator.(value) do
           :ok
@@ -110,7 +112,7 @@ defmodule OpenAI.Agents.Tool do
   @spec to_openai_format(module()) :: map()
   def to_openai_format(tool_module) do
     schema = tool_module.schema()
-    
+
     %{
       type: "function",
       name: schema.name,
