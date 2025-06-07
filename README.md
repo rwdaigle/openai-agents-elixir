@@ -674,6 +674,27 @@ case OpenAI.Agents.run(MyAgent, "Hello") do
 end
 ```
 
+## Examples
+
+### Travel Booking Example
+
+A comprehensive example demonstrating all major framework features through a realistic travel booking workflow:
+
+```bash
+cd examples/travel_booking
+mix deps.get
+mix run -e "TravelBooking.main()"
+```
+
+See [`examples/travel_booking/README.md`](examples/travel_booking/README.md) for detailed setup and usage instructions.
+
+This example showcases:
+- Multi-agent handoffs between specialized agents
+- Dynamic instructions based on user context
+- Tool integration for external functions
+- Guardrails for input/output validation
+- Context management across agents
+
 ### Testing Agents
 
 The library includes both unit tests and integration tests:
