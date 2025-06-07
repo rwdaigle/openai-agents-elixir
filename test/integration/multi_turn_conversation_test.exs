@@ -35,25 +35,17 @@ defmodule OpenAI.Agents.Integration.MultiTurnConversationTest do
       assert result1.output =~ "4"
       assert result1.response_id != nil
 
-      {:ok, result2} =
-        OpenAI.Agents.run(ConversationAgent, "What's my name?",
-          previous_response_id: result1.response_id
-        )
+      {:ok, result2} = OpenAI.Agents.run(ConversationAgent, "What's my name?")
 
       assert String.contains?(String.downcase(result2.output), "alice")
     end
 
     @tag :remote
     test "conversation context works with streaming" do
-      # First get response_id from non-streaming call
       {:ok, result1} = OpenAI.Agents.run(ConversationAgent, "I like cats. Tell me a cat fact.")
       assert result1.response_id != nil
 
-      # Then use streaming with previous_response_id
-      stream2 =
-        OpenAI.Agents.stream(ConversationAgent, "What did I say I like?",
-          previous_response_id: result1.response_id
-        )
+      stream2 = OpenAI.Agents.stream(ConversationAgent, "What did I say I like?")
 
       events2 = Enum.to_list(stream2)
 
@@ -73,10 +65,7 @@ defmodule OpenAI.Agents.Integration.MultiTurnConversationTest do
       assert result1.response_id != nil
       assert is_binary(result1.response_id)
 
-      {:ok, result2} =
-        OpenAI.Agents.run(StatefulAgent, "What number did I ask you to remember?",
-          previous_response_id: result1.response_id
-        )
+      {:ok, result2} = OpenAI.Agents.run(StatefulAgent, "What number did I ask you to remember?")
 
       assert String.contains?(result2.output, "42")
 
@@ -90,18 +79,12 @@ defmodule OpenAI.Agents.Integration.MultiTurnConversationTest do
       assert result1.output
       assert result1.response_id != nil
 
-      {:ok, result2} =
-        OpenAI.Agents.run(ConversationAgent, "What's the weather like there?",
-          previous_response_id: result1.response_id
-        )
+      {:ok, result2} = OpenAI.Agents.run(ConversationAgent, "What's the weather like there?")
 
       assert String.contains?(String.downcase(result2.output), "paris")
       assert result2.response_id != nil
 
-      {:ok, result3} =
-        OpenAI.Agents.run(ConversationAgent, "What city are we talking about?",
-          previous_response_id: result2.response_id
-        )
+      {:ok, result3} = OpenAI.Agents.run(ConversationAgent, "What city are we talking about?")
 
       assert String.contains?(String.downcase(result3.output), "paris")
     end
@@ -152,10 +135,7 @@ defmodule OpenAI.Agents.Integration.MultiTurnConversationTest do
       assert result1.output
       assert result1.response_id != nil
 
-      {:ok, result2} =
-        OpenAI.Agents.run(ToolAgent, "What's my favorite color?",
-          previous_response_id: result1.response_id
-        )
+      {:ok, result2} = OpenAI.Agents.run(ToolAgent, "What's my favorite color?")
 
       assert String.contains?(String.downcase(result2.output), "blue")
     end

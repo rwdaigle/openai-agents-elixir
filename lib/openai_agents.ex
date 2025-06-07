@@ -39,7 +39,7 @@ defmodule OpenAI.Agents do
     * `:context` - Application-specific context to pass through execution
     * `:config` - Runtime configuration overrides
     * `:timeout` - Maximum time to wait for completion (default: 60000ms)
-    * `:previous_response_id` - Response ID from previous turn to continue conversation
+    * `:previous_response_id` - Response ID from previous turn to continue conversation (handled automatically)
 
   ## Examples
 
@@ -48,8 +48,7 @@ defmodule OpenAI.Agents do
       
       # Multi-turn conversation
       {:ok, result1} = OpenAI.Agents.run(MyAgent, "My name is Alice")
-      {:ok, result2} = OpenAI.Agents.run(MyAgent, "What's my name?", 
-                                         previous_response_id: result1.response_id)
+      {:ok, result2} = OpenAI.Agents.run(MyAgent, "What's my name?")
   """
   @spec run(module(), String.t() | list(), keyword()) :: {:ok, map()} | {:error, term()}
   def run(agent_module, input, opts \\ []) do
