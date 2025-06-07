@@ -206,6 +206,104 @@ defmodule MyApp.Tools.UserPreferences do
 end
 ```
 
+### Guardrails
+
+Guardrails validate inputs and outputs to ensure safe operation:
+
+```elixir
+defmodule MyApp.Guardrails.NoPersonalInfo do
+  use OpenAI.Agents.Guardrail
+  
+  @impl true
+  def validate_input(input, _context) do
+    if String.match?(input, ~r/ssn|social security|credit card/i) do
+      {:error, "Cannot process personal information", %{type: "privacy_violation"}}
+    else
+      :ok
+    end
+  end
+  
+  @impl true
+  def validate_output(output, _context) do
+    if String.match?(output, ~r/password|secret/i) do
+      {:error, "Output contains sensitive information", %{type: "data_leak"}}
+    else
+      :ok
+    end
+  end
+end
+
+defmodule MyApp.SecureAgent do
+  use OpenAI.Agent
+  
+  @impl true
+  def configure do
+    %{
+      name: "secure_agent",
+      instructions: "You are a helpful assistant.",
+      input_guardrails: [MyApp.Guardrails.NoPersonalInfo],
+      output_guardrails: [MyApp.Guardrails.NoPersonalInfo]
+    }
+  end
+end
+```
+
+### Handoffs
+
+Agents can transfer conversations to specialized agents:
+
+```elixir
+defmodule MyApp.Tools.TransferToSupport do
+  use OpenAI.Agents.Tool
+  
+  @impl true
+  def schema do
+    %{
+      name: "transfer_to_support",
+      description: "Transfer the conversation to a support specialist",
+      parameters: %{
+        type: "object",
+        properties: %{
+          reason: %{type: "string", description: "Reason for transfer"}
+        },
+        required: ["reason"]
+      }
+    }
+  end
+  
+  @impl true
+  def execute(%{"reason" => reason}, _context) do
+    {:handoff, MyApp.SupportAgent, %{transfer_reason: reason}}
+  end
+end
+
+defmodule MyApp.SupportAgent do
+  use OpenAI.Agent
+  
+  @impl true
+  def configure do
+    %{
+      name: "support_agent",
+      instructions: "You are a technical support specialist."
+    }
+  end
+end
+
+defmodule MyApp.TriageAgent do
+  use OpenAI.Agent
+  
+  @impl true
+  def configure do
+    %{
+      name: "triage_agent",
+      instructions: "Route users to appropriate specialists.",
+      tools: [MyApp.Tools.TransferToSupport],
+      handoffs: [MyApp.SupportAgent]
+    }
+  end
+end
+```
+
 ## Examples
 
 ### Example 1: Simple Q&A Agent
