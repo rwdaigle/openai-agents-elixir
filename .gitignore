@@ -54,3 +54,9 @@ Thumbs.db
 
 # Ignore reference materials
 /reference/openai-agents-python/
+# Example app build artifacts
+examples/*/_build/
+examples/*/deps/
+examples/*/*.ez
+examples/*/erl_crash.dump
+examples/*/.elixir_ls/
