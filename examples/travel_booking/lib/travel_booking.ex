@@ -13,7 +13,9 @@ defmodule TravelBooking do
   alias TravelBooking.Agents.TravelBookingAgent
 
   def main(args \\ []) do
-    case args do
+    normalized_args = normalize_args(args)
+    
+    case normalized_args do
       ["--help"] -> print_help()
       ["--interactive"] -> run_interactive()
       [input] -> run_single(input)
@@ -90,6 +92,8 @@ defmodule TravelBooking do
   end
 
   defp run_single(input) do
+    normalized_input = normalize_input(input)
+    
     context = %{
       user_context: %{
         name: "User", 
@@ -98,7 +102,7 @@ defmodule TravelBooking do
       }
     }
     
-    case OpenAI.Agents.run(TravelBookingAgent, input, context: context) do
+    case OpenAI.Agents.run(TravelBookingAgent, normalized_input, context: context) do
       {:ok, result} -> IO.puts(result.output)
       {:error, reason} -> IO.puts("Error: #{inspect(reason)}")
     end
@@ -134,4 +138,20 @@ defmodule TravelBooking do
       "Book me a flight for tomorrow" (will trigger date validation)
     """)
   end
+
+  defp normalize_args(args) when is_list(args) do
+    Enum.map(args, &normalize_input/1)
+  end
+
+  defp normalize_args(args), do: args
+
+  defp normalize_input(input) when is_list(input) and length(input) > 0 do
+    if Enum.all?(input, &is_integer/1) and Enum.all?(input, &(&1 >= 0 and &1 <= 1_114_111)) do
+      List.to_string(input)
+    else
+      input
+    end
+  end
+
+  defp normalize_input(input), do: input
 end
