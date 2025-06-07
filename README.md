@@ -44,42 +44,22 @@ To publish a new version to hex.pm:
    git status  # should show no uncommitted changes
    ```
 
-2. Use the automated publishing task:
-   ```bash
-   # Patch version (0.1.0 -> 0.1.1)
-   mix hex_publish_auto patch
+2. Update the version in `mix.exs`
 
-   # Minor version (0.1.0 -> 0.2.0)  
-   mix hex_publish_auto minor
-
-   # Major version (0.1.0 -> 1.0.0)
-   mix hex_publish_auto major
-   ```
-
-The `hex_publish_auto` task will automatically:
-- Bump the version in `mix.exs`
-- Commit the version change
-- Create a git tag (e.g., `v0.1.1`)
-- Build and publish the package to hex.pm
-- Push changes and tags to the repository
-
-### Manual Publishing (Alternative)
-
-If you prefer to publish manually:
-
-1. Update the version in `mix.exs`
-2. Commit and tag the release:
+3. Commit and tag the release:
    ```bash
    git add mix.exs
    git commit -m "Bump version to X.Y.Z"
    git tag -a vX.Y.Z -m "Release X.Y.Z"
    ```
-3. Build and publish:
+
+4. Build and publish:
    ```bash
    mix hex.build
    mix hex.publish
    ```
-4. Push changes:
+
+5. Push changes:
    ```bash
    git push origin main --tags
    ```
