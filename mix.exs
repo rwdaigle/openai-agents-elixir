@@ -20,7 +20,9 @@ defmodule OpenAI.Agents.MixProject do
       docs: [
         main: "readme",
         extras: ["README.md"]
-      ]
+      ],
+      description: description(),
+      package: package()
     ]
   end
 
@@ -67,6 +69,20 @@ defmodule OpenAI.Agents.MixProject do
       "test.coverage": ["coveralls.html"],
       lint: ["format --check-formatted", "credo --strict"],
       "format.all": ["format"]
+    ]
+  end
+
+  defp description do
+    "Build powerful AI agents in Elixir using OpenAI's Responses API. This library provides an idiomatic Elixir framework for creating agents that can use tools, delegate tasks to specialized agents, and maintain conversations with full type safety and fault tolerance."
+  end
+
+  defp package do
+    [
+      licenses: ["MIT"],
+      links: %{
+        "GitHub" => "https://github.com/rwdaigle/openai-agents-elixir",
+        "Documentation" => "https://hexdocs.pm/openai_agents"
+      }
     ]
   end
 end
