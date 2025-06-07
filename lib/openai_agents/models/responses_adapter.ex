@@ -20,21 +20,49 @@ defmodule OpenAI.Agents.Models.ResponsesAdapter do
     headers = build_headers(config)
     body = Jason.encode!(request)
 
+    # Record generation span for tracing
+    span_id =
+      OpenAI.Agents.Tracing.record_span(
+        :generation,
+        OpenAI.Agents.Tracing.Span.generation_span(
+          request["model"],
+          request,
+          trace_id: Process.get(:current_trace_id)
+        )
+      )
+
     case Finch.build(:post, url, headers, body)
          |> Finch.request(OpenAI.Agents.Finch, receive_timeout: @timeout) do
       {:ok, %{status: 200, body: response_body}} ->
         case Jason.decode(response_body) do
           {:ok, decoded} ->
-            {:ok, normalize_response(decoded)}
+            normalized = normalize_response(decoded)
+
+            # Record response span for tracing
+            OpenAI.Agents.Tracing.record_span(
+              :response,
+              OpenAI.Agents.Tracing.Span.response_span(
+                decoded,
+                trace_id: Process.get(:current_trace_id)
+              )
+            )
+
+            # End generation span
+            OpenAI.Agents.Tracing.end_span(span_id, {:ok, normalized})
+
+            {:ok, normalized}
 
           {:error, error} ->
+            OpenAI.Agents.Tracing.end_span(span_id, {:error, error})
             {:error, {:json_decode_error, error}}
         end
 
       {:ok, %{status: status, body: body}} ->
+        OpenAI.Agents.Tracing.end_span(span_id, {:error, {:api_error, status, body}})
         {:error, {:api_error, status, body}}
 
       {:error, error} ->
+        OpenAI.Agents.Tracing.end_span(span_id, {:error, {:network_error, error}})
         {:error, {:network_error, error}}
     end
   end
@@ -59,11 +87,43 @@ defmodule OpenAI.Agents.Models.ResponsesAdapter do
   end
 
   defp build_headers(config) do
-    [
+    base_headers = [
       {"Authorization", "Bearer #{config.api_key}"},
       {"Content-Type", "application/json"},
       {"Accept", "text/event-stream"}
-    ] ++ build_extra_headers(config)
+    ]
+
+    tracing_headers = build_tracing_headers(config)
+    extra_headers = build_extra_headers(config)
+
+    base_headers ++ tracing_headers ++ extra_headers
+  end
+
+  defp build_tracing_headers(_config) do
+    if OpenAI.Agents.Tracing.tracing_enabled?() do
+      trace_id = Process.get(:current_trace_id)
+      group_id = Process.get(:current_group_id)
+
+      headers = []
+
+      headers =
+        if trace_id do
+          [{"X-Trace-Id", trace_id} | headers]
+        else
+          headers
+        end
+
+      headers =
+        if group_id do
+          [{"X-Group-Id", group_id} | headers]
+        else
+          headers
+        end
+
+      [{"OpenAI-Beta", "traces=v1"} | headers]
+    else
+      []
+    end
   end
 
   defp build_extra_headers(config) do

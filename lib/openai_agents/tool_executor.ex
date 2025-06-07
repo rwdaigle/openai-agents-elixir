@@ -48,6 +48,18 @@ defmodule OpenAI.Agents.ToolExecutor do
 
     Telemetry.start_tool(tool_name, call_id)
 
+    # Record function span for tracing
+    span_id =
+      OpenAI.Agents.Tracing.record_span(
+        :function,
+        OpenAI.Agents.Tracing.Span.function_span(
+          tool_name,
+          arguments,
+          call_id: call_id,
+          trace_id: Process.get(:current_trace_id)
+        )
+      )
+
     result =
       case Map.get(tool_map, tool_name) do
         nil ->
@@ -65,6 +77,9 @@ defmodule OpenAI.Agents.ToolExecutor do
               end
           end
       end
+
+    # End function span
+    OpenAI.Agents.Tracing.end_span(span_id, result)
 
     Telemetry.stop_tool(tool_name, call_id, result)
 

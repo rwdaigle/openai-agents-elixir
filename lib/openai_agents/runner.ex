@@ -27,6 +27,7 @@ defmodule OpenAI.Agents.Runner do
     :current_turn,
     :max_turns,
     :trace_id,
+    :openai_trace_id,
     :stream_producer,
     :config,
     :usage,
@@ -100,6 +101,15 @@ defmodule OpenAI.Agents.Runner do
   def init({agent_module, input, opts}) do
     trace_id = Keyword.get(opts, :trace_id, generate_trace_id())
 
+    # Start conversation trace for OpenAI tracing
+    openai_trace_id =
+      OpenAI.Agents.Tracing.start_conversation_trace(
+        agent_module,
+        input,
+        group_id: opts[:group_id],
+        context: opts[:context] || %{}
+      )
+
     state = %__MODULE__{
       agent_module: agent_module,
       context: init_context(opts[:context]),
@@ -107,6 +117,7 @@ defmodule OpenAI.Agents.Runner do
       current_turn: 0,
       max_turns: Keyword.get(opts, :max_turns, @default_max_turns),
       trace_id: trace_id,
+      openai_trace_id: openai_trace_id,
       config: Keyword.get(opts, :config, %{}),
       usage: %Usage{},
       start_time: System.monotonic_time(),
@@ -691,6 +702,9 @@ defmodule OpenAI.Agents.Runner do
   end
 
   defp finalize_result(result, state) do
+    # End conversation trace for OpenAI tracing
+    OpenAI.Agents.Tracing.end_conversation_trace(state.openai_trace_id, result)
+
     %{
       output: result.output,
       usage: state.usage,
