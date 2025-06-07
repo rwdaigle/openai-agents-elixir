@@ -110,7 +110,8 @@ defmodule OpenAI.Agents.Runner do
       config: Keyword.get(opts, :config, %{}),
       usage: %Usage{},
       start_time: System.monotonic_time(),
-      caller_pid: Keyword.get(opts, :caller_pid, self())
+      caller_pid: Keyword.get(opts, :caller_pid, self()),
+      response_id: Keyword.get(opts, :previous_response_id)
     }
 
     # Start telemetry span
@@ -699,7 +700,8 @@ defmodule OpenAI.Agents.Runner do
           System.monotonic_time() - state.start_time,
           :native,
           :millisecond
-        )
+        ),
+      response_id: state.response_id
     }
   end
 end
