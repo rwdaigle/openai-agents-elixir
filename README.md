@@ -29,6 +29,46 @@ Then run:
 mix deps.get
 ```
 
+## Publishing to Hex
+
+This package is published to [hex.pm](https://hex.pm/packages/openai_agents) for easy installation in Elixir projects.
+
+### For Maintainers
+
+To publish a new version to hex.pm:
+
+1. Ensure all tests pass and the working directory is clean:
+   ```bash
+   mix test
+   mix lint
+   git status  # should show no uncommitted changes
+   ```
+
+2. Update the version in `mix.exs`
+
+3. Commit and tag the release:
+   ```bash
+   git add mix.exs
+   git commit -m "Bump version to X.Y.Z"
+   git tag -a vX.Y.Z -m "Release X.Y.Z"
+   ```
+
+4. Build and publish:
+   ```bash
+   mix hex.build
+   mix hex.publish
+   ```
+
+5. Push changes:
+   ```bash
+   git push origin main --tags
+   ```
+
+### Prerequisites
+
+- You must be authenticated with hex.pm: `mix hex.user auth`
+- You must be added as a package owner (for subsequent releases)
+
 ## Setup
 
 ### 1. Configure your OpenAI API key
