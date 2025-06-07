@@ -31,7 +31,8 @@ defmodule OpenAI.Agents.Runner do
     :config,
     :usage,
     :start_time,
-    :caller_pid
+    :caller_pid,
+    :response_id
   ]
 
   @default_max_turns 10
@@ -244,7 +245,7 @@ defmodule OpenAI.Agents.Runner do
         case adapter.create_completion(request, get_api_config(state)) do
           {:ok, response} ->
             usage = update_usage(state.usage, response.usage)
-            {:ok, response, %{state | usage: usage}}
+            {:ok, response, %{state | usage: usage, response_id: response.response_id}}
 
           {:error, reason} ->
             {:error, {:api_error, reason}, state}
@@ -286,7 +287,7 @@ defmodule OpenAI.Agents.Runner do
 
         # Continue with the accumulated response like non-streaming
         usage = update_usage(state.usage, response.usage)
-        {:ok, response, %{state | usage: usage}}
+        {:ok, response, %{state | usage: usage, response_id: response.response_id}}
     end
   end
 
@@ -455,6 +456,12 @@ defmodule OpenAI.Agents.Runner do
       parallel_tool_calls: get_in(config, [:model_settings, :parallel_tool_calls]) != false,
       stream: state.stream_producer != nil
     }
+
+    base_request =
+      case state.response_id do
+        nil -> base_request
+        response_id -> Map.put(base_request, :previous_response_id, response_id)
+      end
 
     # Add response format if configured
     base_request =
