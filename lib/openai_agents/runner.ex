@@ -583,7 +583,8 @@ defmodule OpenAI.Agents.Runner do
   defp normalize_input(input) when is_list(input), do: input
 
   defp generate_trace_id do
-    :crypto.strong_rand_bytes(16) |> Base.encode16(case: :lower)
+    uuid = :crypto.strong_rand_bytes(16) |> Base.encode16(case: :lower)
+    "trace_#{uuid}"
   end
 
   defp update_usage(current_usage, new_usage) do

@@ -56,7 +56,7 @@ defmodule OpenAI.Agents.ToolExecutor do
           tool_name,
           arguments,
           call_id: call_id,
-          trace_id: context[:trace_id]
+          trace_id: Map.get(context, :trace_id)
         )
       )
 

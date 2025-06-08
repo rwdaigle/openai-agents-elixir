@@ -6,7 +6,7 @@ defmodule OpenAI.Agents.StreamHandler do
   use GenStage
   require Logger
 
-  defstruct [:buffer, :completed, :subscribers]
+  defstruct [:buffer, :completed, :subscribers, :trace_id]
 
   # Client API
 
@@ -41,11 +41,12 @@ defmodule OpenAI.Agents.StreamHandler do
   # GenStage callbacks
 
   @impl true
-  def init(_opts) do
+  def init(opts) do
     state = %__MODULE__{
       buffer: :queue.new(),
       completed: false,
-      subscribers: []
+      subscribers: [],
+      trace_id: Keyword.get(opts, :trace_id)
     }
 
     {:producer, state, dispatcher: GenStage.BroadcastDispatcher}
@@ -53,7 +54,7 @@ defmodule OpenAI.Agents.StreamHandler do
 
   @impl true
   def handle_cast({:emit, event}, state) do
-    normalized_event = normalize_event(event)
+    normalized_event = normalize_event(event, state)
 
     # Skip nil events
     new_buffer =
@@ -137,14 +138,16 @@ defmodule OpenAI.Agents.StreamHandler do
     {Enum.reverse(remaining), new_buffer}
   end
 
-  defp normalize_event(%{type: "done"}), do: %OpenAI.Agents.Events.StreamComplete{}
+  defp normalize_event(event, state \\ %{trace_id: nil})
+
+  defp normalize_event(%{type: "done"}, _state), do: %OpenAI.Agents.Events.StreamComplete{}
 
   # Handle the simple "done" event type from [DONE] SSE events
-  defp normalize_event(%{type: "done", data: _data}) do
+  defp normalize_event(%{type: "done", data: _data}, _state) do
     %OpenAI.Agents.Events.ResponseCompleted{usage: %{}}
   end
 
-  defp normalize_event(%{type: "response.created", data: data}) do
+  defp normalize_event(%{type: "response.created", data: data}, _state) do
     response = data["response"] || data
 
     %OpenAI.Agents.Events.ResponseCreated{
@@ -154,14 +157,14 @@ defmodule OpenAI.Agents.StreamHandler do
     }
   end
 
-  defp normalize_event(%{type: "response.output_text.delta", data: data}) do
+  defp normalize_event(%{type: "response.output_text.delta", data: data}, _state) do
     %OpenAI.Agents.Events.TextDelta{
       text: data["delta"],
       index: data["content_index"]
     }
   end
 
-  defp normalize_event(%{type: "response.function_call.arguments.delta", data: data}) do
+  defp normalize_event(%{type: "response.function_call.arguments.delta", data: data}, _state) do
     %OpenAI.Agents.Events.FunctionCallArgumentsDelta{
       arguments: data["arguments"],
       call_id: data["call_id"],
@@ -170,7 +173,7 @@ defmodule OpenAI.Agents.StreamHandler do
   end
 
   # Handle tool calls during streaming
-  defp normalize_event(%{type: "response.output_item.added", data: data}) do
+  defp normalize_event(%{type: "response.output_item.added", data: data}, _state) do
     item = data["item"]
 
     case item["type"] do
@@ -186,7 +189,7 @@ defmodule OpenAI.Agents.StreamHandler do
     end
   end
 
-  defp normalize_event(%{type: "response.completed", data: data}) do
+  defp normalize_event(%{type: "response.completed", data: data}, state) do
     response = data["response"] || data
     usage = response["usage"] || %{}
 
@@ -198,16 +201,17 @@ defmodule OpenAI.Agents.StreamHandler do
     }
 
     %OpenAI.Agents.Events.ResponseCompleted{
-      usage: normalized_usage
+      usage: normalized_usage,
+      trace_id: state.trace_id
     }
   end
 
-  defp normalize_event(%{type: "response.in_progress", data: _data}) do
+  defp normalize_event(%{type: "response.in_progress", data: _data}, _state) do
     # Skip in_progress events - they don't need to be exposed to users
     nil
   end
 
-  defp normalize_event(%{type: "response.function_call_arguments.delta", data: data}) do
+  defp normalize_event(%{type: "response.function_call_arguments.delta", data: data}, _state) do
     %OpenAI.Agents.Events.FunctionCallArgumentsDelta{
       arguments: data["delta"],
       call_id: data["item_id"],
@@ -215,17 +219,17 @@ defmodule OpenAI.Agents.StreamHandler do
     }
   end
 
-  defp normalize_event(%{type: "response.function_call_arguments.done", data: _data}) do
+  defp normalize_event(%{type: "response.function_call_arguments.done", data: _data}, _state) do
     # Skip function call arguments done events
     nil
   end
 
-  defp normalize_event(%{type: "response.output_item.done", data: _data}) do
+  defp normalize_event(%{type: "response.output_item.done", data: _data}, _state) do
     # Skip output item done events
     nil
   end
 
-  defp normalize_event(%{type: "response.done", data: data}) do
+  defp normalize_event(%{type: "response.done", data: data}, _state) do
     response = data["response"] || data
 
     %OpenAI.Agents.Events.ResponseCompleted{
@@ -233,7 +237,7 @@ defmodule OpenAI.Agents.StreamHandler do
     }
   end
 
-  defp normalize_event(event) do
+  defp normalize_event(event, _state) do
     %OpenAI.Agents.Events.Unknown{data: event}
   end
 end
