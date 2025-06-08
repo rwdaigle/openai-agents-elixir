@@ -42,7 +42,7 @@ defmodule OpenAI.Agents.ToolExecutor do
   """
   @spec execute_single(map(), map(), any()) :: {String.t(), any()}
   def execute_single(function_call, tool_map, context) do
-    call_id = function_call.id || function_call["id"]
+    call_id = function_call.call_id || function_call["call_id"] || function_call.id || function_call["id"]
     tool_name = function_call.name || function_call["name"]
     arguments = parse_arguments(function_call.arguments || function_call["arguments"])
 

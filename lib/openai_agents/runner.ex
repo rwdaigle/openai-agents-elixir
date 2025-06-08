@@ -363,7 +363,7 @@ defmodule OpenAI.Agents.Runner do
     # Separate regular tool calls from handoff calls
     {handoff_calls, tool_calls} =
       Enum.split_with(function_calls, fn call ->
-        function_name = call[:name] || call["name"]
+        function_name = call.name || call["name"]
         String.starts_with?(function_name, "handoff_to_")
       end)
 
@@ -373,8 +373,31 @@ defmodule OpenAI.Agents.Runner do
         # Process the first handoff (ignore multiple handoffs)
         case Handoff.execute(handoff_call, handoffs, state) do
           {:ok, target_agent, filtered_conversation} ->
-            # Execute the target agent
-            execute_handoff_agent(target_agent, filtered_conversation, state)
+            # Add handoff function call and result to conversation
+            function_call_item = %{
+              type: "function_call",
+              call_id: handoff_call.call_id || handoff_call["call_id"] || handoff_call.id || handoff_call["id"],
+              name: handoff_call.name || handoff_call["name"],
+              arguments: handoff_call.arguments || handoff_call["arguments"] || "{}"
+            }
+            
+            result_item = %{
+              type: "function_call_output",
+              call_id: function_call_item.call_id,
+              output: Jason.encode!(%{handoff_completed: true, target: to_string(target_agent)})
+            }
+            
+            # Return these items to continue the conversation loop with handoff result
+            new_items = [function_call_item, result_item]
+            
+            # Set up state to switch to the new agent on the next iteration
+            updated_state = %{
+              state
+              | agent_module: target_agent,
+                conversation: filtered_conversation
+            }
+            
+            {:ok, %{is_final: false, output: nil, new_items: new_items}, updated_state}
 
           {:error, reason} ->
             {:error, {:handoff_error, reason}, state}
@@ -390,7 +413,7 @@ defmodule OpenAI.Agents.Runner do
           Enum.map(tool_calls, fn call ->
             %{
               type: "function_call",
-              call_id: call.id || call["id"],
+              call_id: call.call_id || call["call_id"] || call.id || call["id"],
               name: call.name || call["name"],
               arguments: call.arguments || call["arguments"] || "{}"
             }
@@ -405,6 +428,8 @@ defmodule OpenAI.Agents.Runner do
               output: encode_result(result)
             }
           end)
+
+
 
         all_new_items = function_call_items ++ result_items
         {:ok, %{is_final: false, output: nil, new_items: all_new_items}, state}
@@ -455,6 +480,7 @@ defmodule OpenAI.Agents.Runner do
 
   defp build_request(instructions, conversation, config, state) do
     tools = prepare_tools(config, state)
+
 
     base_request = %{
       model: Map.get(config, :model, "gpt-4.1-mini"),
@@ -628,6 +654,7 @@ defmodule OpenAI.Agents.Runner do
         Enum.map(completed_function_calls, fn call ->
           %{
             id: call["id"],
+            call_id: call["call_id"] || call["id"],
             name: call["name"],
             arguments: call["arguments"] || "{}"
           }
@@ -642,7 +669,7 @@ defmodule OpenAI.Agents.Runner do
         Enum.map(tool_calls, fn call ->
           %{
             type: "function_call",
-            call_id: call.id,
+            call_id: call.call_id || call["call_id"] || call.id || call["id"],
             name: call.name,
             arguments: call.arguments
           }

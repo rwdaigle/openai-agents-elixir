@@ -150,9 +150,12 @@ defmodule OpenAI.Agents.Models.ResponsesAdapter do
                   %{type: "text", text: content["text"]}
 
                 "tool_use" ->
+                  # Use call_id field from API response, which is what the API expects for tool outputs
+                  call_id = content["call_id"] || content["id"]
                   %{
                     type: "function_call",
                     id: content["id"],
+                    call_id: call_id,
                     name: content["name"],
                     arguments: content["arguments"]
                   }
@@ -164,9 +167,12 @@ defmodule OpenAI.Agents.Models.ResponsesAdapter do
 
           "function_call" ->
             # Direct function call in output
+            # Use call_id field from API response, which is what the API expects for tool outputs
+            call_id = item["call_id"] || item["id"]
             %{
               type: "function_call",
-              id: item["id"] || item["call_id"],
+              id: item["id"],
+              call_id: call_id,
               name: item["name"],
               arguments: item["arguments"] || "{}"
             }
