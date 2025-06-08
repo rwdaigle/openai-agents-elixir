@@ -42,7 +42,6 @@ defmodule OpenAI.Agents.MixProject do
       {:finch, "~> 0.18"},
       {:jason, "~> 1.4"},
       {:gen_stage, "~> 1.2"},
-      {:ecto, "~> 3.11"},
       {:telemetry, "~> 1.2"},
       {:nimble_options, "~> 1.1"},
 

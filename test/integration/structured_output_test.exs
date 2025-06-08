@@ -4,22 +4,7 @@ defmodule OpenAI.Agents.Integration.StructuredOutputTest do
 
   # First, let's create the schema modules
   defmodule WeatherReport do
-    use Ecto.Schema
-    import Ecto.Changeset
-
-    embedded_schema do
-      field :temperature, :integer
-      field :conditions, :string
-      field :humidity, :integer
-      field :wind_speed, :float
-    end
-
-    def changeset(attrs) do
-      %__MODULE__{}
-      |> cast(attrs, [:temperature, :conditions, :humidity, :wind_speed])
-      |> validate_required([:temperature, :conditions])
-      |> validate_number(:humidity, greater_than_or_equal_to: 0, less_than_or_equal_to: 100)
-    end
+    defstruct [:temperature, :conditions, :humidity, :wind_speed]
 
     def json_schema do
       %{
@@ -37,23 +22,7 @@ defmodule OpenAI.Agents.Integration.StructuredOutputTest do
   end
 
   defmodule BookRecommendation do
-    use Ecto.Schema
-    import Ecto.Changeset
-
-    embedded_schema do
-      field :title, :string
-      field :author, :string
-      field :genre, :string
-      field :reason, :string
-      field :rating, :float
-    end
-
-    def changeset(attrs) do
-      %__MODULE__{}
-      |> cast(attrs, [:title, :author, :genre, :reason, :rating])
-      |> validate_required([:title, :author, :reason])
-      |> validate_number(:rating, greater_than_or_equal_to: 0, less_than_or_equal_to: 5)
-    end
+    defstruct [:title, :author, :genre, :reason, :rating]
 
     def json_schema do
       %{
@@ -72,20 +41,7 @@ defmodule OpenAI.Agents.Integration.StructuredOutputTest do
   end
 
   defmodule TaskList do
-    use Ecto.Schema
-    import Ecto.Changeset
-
-    embedded_schema do
-      field :tasks, {:array, :map}
-      field :total_time_estimate, :integer
-      field :difficulty, :string
-    end
-
-    def changeset(attrs) do
-      %__MODULE__{}
-      |> cast(attrs, [:tasks, :total_time_estimate, :difficulty])
-      |> validate_required([:tasks])
-    end
+    defstruct [:tasks, :total_time_estimate, :difficulty]
 
     def json_schema do
       %{
@@ -275,16 +231,7 @@ defmodule OpenAI.Agents.Integration.StructuredOutputTest do
 
   describe "complex nested schemas" do
     defmodule RecipeSchema do
-      use Ecto.Schema
-
-      embedded_schema do
-        field :name, :string
-        field :cuisine, :string
-        field :prep_time_minutes, :integer
-        field :ingredients, {:array, :map}
-        field :steps, {:array, :string}
-        field :servings, :integer
-      end
+      defstruct [:name, :cuisine, :prep_time_minutes, :ingredients, :steps, :servings]
 
       def json_schema do
         %{
