@@ -43,9 +43,9 @@ defmodule OpenAI.Agents.Tracing do
   """
   def start_conversation_trace(agent_module, _input, opts \\ []) do
     if tracing_enabled?() and Process.whereis(@global_trace_provider) do
-      trace_id = generate_trace_id()
+      trace_id = Keyword.get(opts, :trace_id, generate_trace_id())
       group_id = Keyword.get(opts, :group_id, generate_group_id())
-      
+
       trace = %Trace{
         id: trace_id,
         group_id: group_id,
@@ -54,13 +54,9 @@ defmodule OpenAI.Agents.Tracing do
         spans: [],
         context: Keyword.get(opts, :context, %{})
       }
-      
+
       GenServer.call(@global_trace_provider, {:start_trace, trace})
-      
-      # Store in process dictionary for context propagation
-      Process.put(:current_trace_id, trace_id)
-      Process.put(:current_group_id, group_id)
-      
+
       trace_id
     else
       nil
@@ -72,8 +68,8 @@ defmodule OpenAI.Agents.Tracing do
   """
   def record_span(span_type, span_data, opts \\ []) do
     if tracing_enabled?() and Process.whereis(@global_trace_provider) do
-      trace_id = Keyword.get(opts, :trace_id) || Process.get(:current_trace_id)
-      
+      trace_id = Keyword.get(opts, :trace_id)
+
       if trace_id do
         span = %Span{
           id: generate_span_id(),
@@ -83,7 +79,7 @@ defmodule OpenAI.Agents.Tracing do
           started_at: DateTime.utc_now(),
           ended_at: nil
         }
-        
+
         GenServer.cast(@global_trace_provider, {:record_span, span})
         span.id
       end
@@ -105,10 +101,6 @@ defmodule OpenAI.Agents.Tracing do
   def end_conversation_trace(trace_id, result \\ nil) do
     if tracing_enabled?() and not is_nil(trace_id) and Process.whereis(@global_trace_provider) do
       GenServer.cast(@global_trace_provider, {:end_trace, trace_id, result, DateTime.utc_now()})
-      
-      # Clear process dictionary
-      Process.delete(:current_trace_id)
-      Process.delete(:current_group_id)
     end
   end
 

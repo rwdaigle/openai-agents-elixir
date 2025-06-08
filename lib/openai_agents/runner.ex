@@ -27,7 +27,6 @@ defmodule OpenAI.Agents.Runner do
     :current_turn,
     :max_turns,
     :trace_id,
-    :openai_trace_id,
     :stream_producer,
     :config,
     :usage,
@@ -102,13 +101,13 @@ defmodule OpenAI.Agents.Runner do
     trace_id = Keyword.get(opts, :trace_id, generate_trace_id())
 
     # Start conversation trace for OpenAI tracing
-    openai_trace_id =
-      OpenAI.Agents.Tracing.start_conversation_trace(
-        agent_module,
-        input,
-        group_id: opts[:group_id],
-        context: opts[:context] || %{}
-      )
+    OpenAI.Agents.Tracing.start_conversation_trace(
+      agent_module,
+      input,
+      trace_id: trace_id,
+      group_id: opts[:group_id],
+      context: opts[:context] || %{}
+    )
 
     state = %__MODULE__{
       agent_module: agent_module,
@@ -117,8 +116,7 @@ defmodule OpenAI.Agents.Runner do
       current_turn: 0,
       max_turns: Keyword.get(opts, :max_turns, @default_max_turns),
       trace_id: trace_id,
-      openai_trace_id: openai_trace_id,
-      config: Keyword.get(opts, :config, %{}),
+      config: Keyword.get(opts, :config, %{}) |> Map.put(:group_id, opts[:group_id]),
       usage: %Usage{},
       start_time: System.monotonic_time(),
       caller_pid: Keyword.get(opts, :caller_pid, self()),
@@ -384,7 +382,8 @@ defmodule OpenAI.Agents.Runner do
 
       [] ->
         # Execute regular tool calls in parallel
-        results = ToolExecutor.execute_parallel(tool_calls, tools, state.context)
+        context_with_trace = Map.put(state.context, :trace_id, state.trace_id)
+        results = ToolExecutor.execute_parallel(tool_calls, tools, context_with_trace)
 
         # First add the function calls to the conversation, then add the results
         function_call_items =
@@ -547,7 +546,8 @@ defmodule OpenAI.Agents.Runner do
     %{
       api_key: get_api_key(),
       base_url: get_base_url(),
-      trace_id: state.trace_id
+      trace_id: state.trace_id,
+      group_id: state.config[:group_id]
     }
   end
 
@@ -633,7 +633,8 @@ defmodule OpenAI.Agents.Runner do
         end)
 
       # Execute the tools to get results
-      results = ToolExecutor.execute_parallel(tool_calls, tools, state.context)
+      context_with_trace = Map.put(state.context, :trace_id, state.trace_id)
+      results = ToolExecutor.execute_parallel(tool_calls, tools, context_with_trace)
 
       # Build conversation with function calls and results
       function_call_items =
@@ -703,7 +704,7 @@ defmodule OpenAI.Agents.Runner do
 
   defp finalize_result(result, state) do
     # End conversation trace for OpenAI tracing
-    OpenAI.Agents.Tracing.end_conversation_trace(state.openai_trace_id, result)
+    OpenAI.Agents.Tracing.end_conversation_trace(state.trace_id, result)
 
     %{
       output: result.output,

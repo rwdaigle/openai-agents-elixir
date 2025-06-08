@@ -27,7 +27,7 @@ defmodule OpenAI.Agents.Models.ResponsesAdapter do
         OpenAI.Agents.Tracing.Span.generation_span(
           request["model"],
           request,
-          trace_id: Process.get(:current_trace_id)
+          trace_id: config[:trace_id]
         )
       )
 
@@ -43,7 +43,7 @@ defmodule OpenAI.Agents.Models.ResponsesAdapter do
               :response,
               OpenAI.Agents.Tracing.Span.response_span(
                 decoded,
-                trace_id: Process.get(:current_trace_id)
+                trace_id: config[:trace_id]
               )
             )
 
@@ -99,10 +99,10 @@ defmodule OpenAI.Agents.Models.ResponsesAdapter do
     base_headers ++ tracing_headers ++ extra_headers
   end
 
-  defp build_tracing_headers(_config) do
+  defp build_tracing_headers(config) do
     if OpenAI.Agents.Tracing.tracing_enabled?() do
-      trace_id = Process.get(:current_trace_id)
-      group_id = Process.get(:current_group_id)
+      trace_id = config[:trace_id]
+      group_id = config[:group_id]
 
       headers = []
 
