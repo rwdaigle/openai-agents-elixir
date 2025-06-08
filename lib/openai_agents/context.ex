@@ -9,6 +9,7 @@ defmodule OpenAI.Agents.Context do
 
   use Agent
 
+  @derive Jason.Encoder
   defstruct [:user_context, :usage, :metadata]
 
   @type t :: %__MODULE__{

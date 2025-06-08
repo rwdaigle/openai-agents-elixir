@@ -67,10 +67,12 @@ defmodule TravelBooking do
       }
     }
 
-    interactive_loop(context)
+    # Initialize conversation state
+    conversation_state = %{context: context, previous_response_id: nil}
+    interactive_loop(conversation_state)
   end
 
-  defp interactive_loop(context) do
+  defp interactive_loop(%{context: context, previous_response_id: previous_response_id} = conversation_state) do
     input = IO.gets("\n💬 You: ") |> String.trim()
     
     case input do
@@ -78,17 +80,40 @@ defmodule TravelBooking do
         IO.puts("👋 Goodbye! Thanks for using Travel Booking Assistant!")
       "help" ->
         print_interactive_help()
-        interactive_loop(context)
+        interactive_loop(conversation_state)
+      "new" ->
+        IO.puts("🔄 Starting a new conversation...")
+        new_state = %{conversation_state | previous_response_id: nil}
+        interactive_loop(new_state)
       _ ->
-        case OpenAI.Agents.run(TravelBookingAgent, input, context: context) do
+        case run_agent_with_conversation(TravelBookingAgent, input, context, previous_response_id) do
           {:ok, result} ->
             IO.puts("🤖 Assistant: #{result.output}")
-            interactive_loop(context)
+            new_state = %{conversation_state | previous_response_id: result.response_id}
+            interactive_loop(new_state)
           {:error, reason} ->
             IO.puts("❌ Error: #{inspect(reason)}")
-            interactive_loop(context)
+            interactive_loop(conversation_state)
         end
     end
+  end
+
+  # Helper function to encapsulate the conversation continuation pattern
+  # 
+  # IMPORTANT: For multi-turn conversations, you must manually track and pass
+  # the previous_response_id to maintain conversation context. The OpenAI Agents
+  # library does not automatically handle conversation state - each run() call
+  # is independent unless you explicitly chain them together.
+  #
+  # Best Practice Pattern:
+  # 1. Capture result.response_id from each agent response
+  # 2. Pass it as previous_response_id in the next call
+  # 3. Store conversation state in your application logic
+  #
+  defp run_agent_with_conversation(agent_module, input, context, previous_response_id) do
+    opts = [context: context]
+    opts = if previous_response_id, do: Keyword.put(opts, :previous_response_id, previous_response_id), else: opts
+    OpenAI.Agents.run(agent_module, input, opts)
   end
 
   defp run_single(input) do
@@ -130,6 +155,7 @@ defmodule TravelBooking do
     Interactive Commands:
       quit  - Exit the assistant
       help  - Show this help
+      new   - Start a new conversation (resets conversation history)
       
     Example queries:
       "I want to plan a trip from New York to Paris"
