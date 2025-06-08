@@ -446,6 +446,7 @@ defmodule OpenAI.Agents.Runner do
   defp build_request(instructions, conversation, config, state) do
     tools = prepare_tools(config, state)
 
+
     base_request = %{
       model: Map.get(config, :model, "gpt-4.1-mini"),
       instructions: instructions,
@@ -458,10 +459,17 @@ defmodule OpenAI.Agents.Runner do
       stream: state.stream_producer != nil
     }
 
+    # When we have tool outputs in the conversation, we should not use previous_response_id
+    # because the API needs to process the tool outputs as a fresh request
+    has_tool_outputs = Enum.any?(conversation, fn item ->
+      Map.get(item, :type) == "function_call_output"
+    end)
+    
     base_request =
-      case state.response_id do
-        nil -> base_request
-        response_id -> Map.put(base_request, :previous_response_id, response_id)
+      case {state.response_id, has_tool_outputs} do
+        {nil, _} -> base_request
+        {_, true} -> base_request  # Don't include previous_response_id when we have tool outputs
+        {response_id, false} -> Map.put(base_request, :previous_response_id, response_id)
       end
 
     # Add response format if configured
