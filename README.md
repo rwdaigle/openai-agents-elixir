@@ -681,6 +681,7 @@ config :openai_agents,
   timeout: 60_000,
   
   # Telemetry and tracing
+  tracing_enabled: true,
   trace_processors: [
     OpenAI.Agents.Tracing.ConsoleProcessor,
     {OpenAI.Agents.Tracing.FileProcessor, path: "/tmp/traces"}
@@ -690,6 +691,222 @@ config :openai_agents,
   pool_size: 10,
   pool_timeout: 5_000
 ```
+
+## OpenAI Tracing
+
+The library includes comprehensive OpenAI-compatible tracing capabilities for monitoring and debugging agent interactions. This feature provides detailed observability into multi-turn conversations, tool executions, and API calls.
+
+### Overview
+
+The tracing system captures:
+- **Conversation traces** - Complete agent interactions with group_id linking for multi-turn conversations
+- **Generation spans** - OpenAI API requests and responses with timing and token usage
+- **Function spans** - Tool execution with parameters and results
+- **Response spans** - Structured OpenAI response data
+- **Agent spans** - High-level agent execution context
+- **Handoff spans** - Agent-to-agent delegation tracking
+
+### Configuration
+
+#### Environment Variables
+
+```bash
+# Disable tracing completely
+export OPENAI_AGENTS_DISABLE_TRACING=true
+
+# Enable tracing (default)
+export OPENAI_AGENTS_DISABLE_TRACING=false
+```
+
+#### Application Configuration
+
+```elixir
+# config/config.exs
+config :openai_agents,
+  # Enable/disable tracing
+  tracing_enabled: true,
+  
+  # Configure exporters for trace data
+  trace_exporters: [
+    # Console output for development
+    OpenAI.Agents.Tracing.ConsoleExporter,
+    
+    # Export to OpenAI's undocumented tracing API
+    {OpenAI.Agents.Tracing.OpenAIExporter, 
+     api_key: System.get_env("OPENAI_API_KEY"),
+     batch_size: 100,
+     batch_timeout: 5000}
+  ]
+```
+
+### Usage
+
+#### Basic Tracing
+
+Tracing is automatically enabled for all agent runs:
+
+```elixir
+# Tracing happens automatically
+{:ok, result} = OpenAI.Agents.run(MyAgent, "Hello", 
+  trace_id: "custom-trace-123",  # Optional custom trace ID
+  group_id: "conversation-abc"   # Optional group for multi-turn linking
+)
+```
+
+#### Multi-turn Conversation Tracing
+
+Link related conversations using `group_id`:
+
+```elixir
+# First conversation
+{:ok, result1} = OpenAI.Agents.run(MyAgent, "What's the weather?", 
+  group_id: "weather-conversation"
+)
+
+# Related follow-up (linked by group_id)
+{:ok, result2} = OpenAI.Agents.run(MyAgent, "What about tomorrow?", 
+  group_id: "weather-conversation"
+)
+
+# Both traces will be linked in OpenAI's tracing system
+```
+
+#### Custom Context for Tracing
+
+Pass additional context that will be included in traces:
+
+```elixir
+context = %{
+  user_id: "user123",
+  session_id: "session456",
+  feature_flags: %{new_ui: true}
+}
+
+{:ok, result} = OpenAI.Agents.run(MyAgent, "Hello", 
+  context: context,
+  group_id: "user-session"
+)
+```
+
+### Trace Data Structure
+
+The tracing system captures structured data compatible with OpenAI's format:
+
+```elixir
+# Conversation Trace
+%OpenAI.Agents.Tracing.Trace{
+  id: "trace_abc123",
+  group_id: "group_def456", 
+  agent_module: MyAgent,
+  started_at: ~U[2024-01-01 12:00:00Z],
+  ended_at: ~U[2024-01-01 12:00:05Z],
+  spans: [...],
+  context: %{user_id: "123"}
+}
+
+# Generation Span (API Request)
+%OpenAI.Agents.Tracing.Span{
+  id: "span_gen789",
+  type: :generation,
+  data: %{
+    model: "gpt-4o",
+    request: %{messages: [...], temperature: 0.7},
+    response: %{output: [...], usage: %{total_tokens: 150}}
+  }
+}
+
+# Function Span (Tool Execution)  
+%OpenAI.Agents.Tracing.Span{
+  id: "span_func456",
+  type: :function,
+  data: %{
+    name: "get_weather",
+    arguments: %{city: "San Francisco"},
+    result: %{temperature: 72, conditions: "sunny"}
+  }
+}
+```
+
+### OpenAI API Integration
+
+The library automatically integrates with OpenAI's undocumented tracing API:
+
+- **Endpoint**: `https://api.openai.com/v1/traces/ingest`
+- **Headers**: `"OpenAI-Beta": "traces=v1"`
+- **Authentication**: Uses your existing OpenAI API key
+- **Batch Processing**: Traces are exported in batches for efficiency
+
+### Development and Debugging
+
+#### Console Exporter
+
+For development, use the console exporter to see traces in your terminal:
+
+```elixir
+# config/dev.exs
+config :openai_agents,
+  trace_exporters: [
+    OpenAI.Agents.Tracing.ConsoleExporter
+  ]
+```
+
+#### Custom Exporters
+
+Create custom exporters for your monitoring infrastructure:
+
+```elixir
+defmodule MyApp.DatadogExporter do
+  @behaviour OpenAI.Agents.Tracing.Exporter
+  
+  @impl true
+  def export(traces_and_spans) do
+    # Send to Datadog, Prometheus, etc.
+    Enum.each(traces_and_spans, &send_to_datadog/1)
+  end
+end
+
+# config/prod.exs
+config :openai_agents,
+  trace_exporters: [
+    MyApp.DatadogExporter,
+    OpenAI.Agents.Tracing.OpenAIExporter
+  ]
+```
+
+### Performance Considerations
+
+- **Minimal Overhead**: Tracing uses background processes and batching
+- **Graceful Degradation**: Agents continue working if tracing fails
+- **Environment Control**: Automatically disabled in test environment
+- **Memory Management**: Traces are exported and cleaned up regularly
+
+### Troubleshooting
+
+#### Tracing Not Working
+
+1. Check if tracing is enabled:
+```elixir
+OpenAI.Agents.Tracing.tracing_enabled?()
+# Should return true
+```
+
+2. Verify the tracing supervisor is running:
+```elixir
+Process.whereis(OpenAI.Agents.TracingSupervisor)
+# Should return a PID
+```
+
+3. Check environment variables:
+```bash
+echo $OPENAI_AGENTS_DISABLE_TRACING
+# Should be empty or "false"
+```
+
+#### Missing Traces in OpenAI
+
+- Ensure your OpenAI API key has access to the tracing beta
+- Check that `OpenAI.Agents.Tracing.OpenAIExporter` is configured
+- Verify network connectivity to `api.openai.com`
 
 ## Common Patterns
 

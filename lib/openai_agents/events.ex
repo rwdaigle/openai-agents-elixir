@@ -25,7 +25,7 @@ defmodule OpenAI.Agents.Events do
 
   defmodule ResponseCompleted do
     @moduledoc "Emitted when a response completes"
-    defstruct [:usage]
+    defstruct [:usage, :trace_id]
   end
 
   defmodule StreamComplete do
