@@ -153,32 +153,50 @@ defmodule OpenAI.Agents.Runner do
   # Private functions
 
   defp execute_agent_loop(state) do
-    with {:ok, state} <- check_turn_limit(state),
-         {:ok, state} <- run_agent_lifecycle(:on_start, state),
-         {:ok, instructions} <- Agent.get_instructions(state.agent_module, state.context),
-         {:ok, state} <- run_input_guardrails(state),
-         model_result <- call_model(instructions, state) do
-      case model_result do
-        {:ok, response, state} ->
-          # Both streaming and non-streaming flow
-          case process_response(response, state) do
-            {:ok, result, state} ->
-              if result.is_final do
-                # Complete the stream if we have a producer
-                if state.stream_producer do
-                  StreamHandler.complete(state.stream_producer)
-                end
+    # Check if we have a pending handoff to execute
+    case Map.get(state, :pending_handoff) do
+      {handoff_call, handoffs} ->
+        # Execute the pending handoff
+        state = Map.delete(state, :pending_handoff)
+        execute_pending_handoff(handoff_call, handoffs, state)
+      
+      nil ->
+        # Normal agent execution
+        with {:ok, state} <- check_turn_limit(state),
+             {:ok, state} <- run_agent_lifecycle(:on_start, state),
+             {:ok, instructions} <- Agent.get_instructions(state.agent_module, state.context),
+             {:ok, state} <- run_input_guardrails(state),
+             model_result <- call_model(instructions, state) do
+          case model_result do
+            {:ok, response, state} ->
+              # Both streaming and non-streaming flow
+              case process_response(response, state) do
+                {:ok, result, state} ->
+                  if result.is_final do
+                    # Complete the stream if we have a producer
+                    if state.stream_producer do
+                      StreamHandler.complete(state.stream_producer)
+                    end
 
-                {:ok, finalize_result(result, state), state}
-              else
-                # Continue the loop
-                state = %{
-                  state
-                  | conversation: state.conversation ++ result.new_items,
-                    current_turn: state.current_turn + 1
-                }
+                    {:ok, finalize_result(result, state), state}
+                  else
+                    # Continue the loop
+                    state = %{
+                      state
+                      | conversation: state.conversation ++ result.new_items,
+                        current_turn: state.current_turn + 1
+                    }
 
-                execute_agent_loop(state)
+                    execute_agent_loop(state)
+                  end
+
+                {:error, reason, error_state} ->
+                  # Complete the stream on error if we have a producer
+                  if error_state.stream_producer do
+                    StreamHandler.complete(error_state.stream_producer)
+                  end
+
+                  {:error, reason, error_state}
               end
 
             {:error, reason, error_state} ->
@@ -189,15 +207,19 @@ defmodule OpenAI.Agents.Runner do
 
               {:error, reason, error_state}
           end
+        end
+    end
+  end
 
-        {:error, reason, error_state} ->
-          # Complete the stream on error if we have a producer
-          if error_state.stream_producer do
-            StreamHandler.complete(error_state.stream_producer)
-          end
+  defp execute_pending_handoff(handoff_call, handoffs, state) do
+    # Execute the handoff that was prepared in the previous turn
+    case Handoff.execute(handoff_call, handoffs, state) do
+      {:ok, target_agent, filtered_conversation} ->
+        # Execute the target agent
+        execute_handoff_agent(target_agent, filtered_conversation, state)
 
-          {:error, reason, error_state}
-      end
+      {:error, reason} ->
+        {:error, {:handoff_error, reason}, state}
     end
   end
 
@@ -358,18 +380,29 @@ defmodule OpenAI.Agents.Runner do
         String.starts_with?(function_name, "handoff_to_")
       end)
 
-    # If we have a handoff call, process it immediately
+    # If we have a handoff call, we need to first send both the function call and its output,
+    # then execute the handoff in the next turn
     case handoff_calls do
       [handoff_call | _] ->
-        # Process the first handoff (ignore multiple handoffs)
-        case Handoff.execute(handoff_call, handoffs, state) do
-          {:ok, target_agent, filtered_conversation} ->
-            # Execute the target agent
-            execute_handoff_agent(target_agent, filtered_conversation, state)
-
-          {:error, reason} ->
-            {:error, {:handoff_error, reason}, state}
-        end
+        # Create function call item
+        function_call_item = %{
+          type: "function_call",
+          call_id: handoff_call.id || handoff_call["id"],
+          name: handoff_call.name || handoff_call["name"],
+          arguments: handoff_call.arguments || handoff_call["arguments"] || "{}"
+        }
+        
+        # Create a tool output response for the handoff function call
+        handoff_output = %{
+          type: "function_call_output",
+          call_id: handoff_call.id || handoff_call["id"],
+          output: Jason.encode!(%{message: "Transferring to #{handoff_call.name}..."})
+        }
+        
+        # Store the handoff execution info in the state for the next turn
+        state = Map.put(state, :pending_handoff, {handoff_call, handoffs})
+        
+        {:ok, %{is_final: false, output: nil, new_items: [function_call_item, handoff_output]}, state}
 
       [] ->
         # Execute regular tool calls in parallel
