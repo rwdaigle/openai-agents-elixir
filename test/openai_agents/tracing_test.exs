@@ -25,10 +25,10 @@ defmodule OpenAI.Agents.TracingTest do
   describe "start_conversation_trace/3" do
     test "returns nil when tracing is disabled" do
       System.put_env("OPENAI_AGENTS_DISABLE_TRACING", "true")
-      
+
       result = Tracing.start_conversation_trace(TestAgent, "test input")
       assert is_nil(result)
-      
+
       System.delete_env("OPENAI_AGENTS_DISABLE_TRACING")
     end
 
@@ -37,7 +37,7 @@ defmodule OpenAI.Agents.TracingTest do
       if pid = Process.whereis(OpenAI.Agents.Tracing) do
         GenServer.stop(pid)
       end
-      
+
       result = Tracing.start_conversation_trace(TestAgent, "test input")
       assert is_nil(result)
     end
@@ -46,10 +46,10 @@ defmodule OpenAI.Agents.TracingTest do
   describe "record_span/3" do
     test "returns nil when tracing is disabled" do
       System.put_env("OPENAI_AGENTS_DISABLE_TRACING", "true")
-      
+
       result = Tracing.record_span(:agent, %{test: "data"})
       assert is_nil(result)
-      
+
       System.delete_env("OPENAI_AGENTS_DISABLE_TRACING")
     end
 
@@ -58,7 +58,7 @@ defmodule OpenAI.Agents.TracingTest do
       if pid = Process.whereis(OpenAI.Agents.Tracing) do
         GenServer.stop(pid)
       end
-      
+
       result = Tracing.record_span(:agent, %{test: "data"})
       assert is_nil(result)
     end
@@ -158,6 +158,7 @@ defmodule OpenAI.Agents.Tracing.SpanTest do
         "model" => "gpt-4",
         "usage" => %{"total_tokens" => 100}
       }
+
       data = Span.response_span(response, trace_id: "trace_123")
 
       assert data.type == :response
